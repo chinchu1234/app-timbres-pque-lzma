@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gestión de Timbres</title>
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+
+  <!-- PANTALLA 1: LOGIN / REGISTRO INTELIGENTE -->
+  <section id="login-screen" class="screen active">
+    <div class="card login-card">
+      <h1>Acceso al Sistema</h1>
+      <p class="subtitle">Ingresá tu correo y contraseña. Si es tu primera vez, te pediremos tu nombre para registrar tu cuenta.</p>
+      
+      <form id="login-form">
+        <label for="login-email">Correo electrónico</label>
+        <input type="email" id="login-email" placeholder="nombre@ejemplo.com" required />
+
+        <label for="login-pass">Contraseña</label>
+        <input type="password" id="login-pass" placeholder="••••••" required />
+
+        <!-- CAMPO OCULTO: Solo aparece si el mail es nuevo o no tiene nombre asignado -->
+        <div id="name-field-group" class="hidden">
+          <label for="login-name">Nombre y Apellido</label>
+          <input type="text" id="login-name" placeholder="Ej. Alejandro Ríos" />
+        </div>
+
+        <button type="submit" id="btn-login-submit" class="btn-primary">Ingresar</button>
+      </form>
+
+      <p id="login-error" class="error-msg"></p>
+
+      <div class="login-links">
+        <button type="button" id="btn-go-reset" class="btn-link">Cambiar mi contraseña</button>
+      </div>
+
+      <div class="hint-box">
+        <strong>Administrador principal:</strong><br />
+        Email: <code>admin@app.com</code> | Clave: <code>1234</code><br />
+        <small>(Desde el Panel Admin puede otorgar permisos de administrador a otros usuarios).</small>
+      </div>
+    </div>
+  </section>
+
+  <!-- PANTALLA 1B: CAMBIAR CONTRASEÑA -->
+  <section id="reset-screen" class="screen">
+    <div class="card login-card">
+      <h1>Actualizar Contraseña</h1>
+      <p class="subtitle">Ingresá tu correo y definí tu nueva clave</p>
+
+      <form id="reset-form">
+        <label for="reset-email">Correo electrónico registrado</label>
+        <input type="email" id="reset-email" placeholder="nombre@ejemplo.com" required />
+
+        <label for="reset-new-pass">Nueva contraseña</label>
+        <input type="password" id="reset-new-pass" placeholder="Nueva clave" required />
+
+        <label for="reset-confirm-pass">Confirmar nueva contraseña</label>
+        <input type="password" id="reset-confirm-pass" placeholder="Repetí la nueva clave" required />
+
+        <button type="submit" class="btn-primary">Guardar nueva contraseña</button>
+      </form>
+
+      <p id="reset-msg" class="error-msg"></p>
+
+      <div class="login-links">
+        <button type="button" id="btn-cancel-reset" class="btn-link">Volver al inicio</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- PANTALLA 2: APLICACIÓN PRINCIPAL -->
+  <section id="app-screen" class="screen">
+    <header class="topbar">
+      <div class="user-info-bar">
+        <strong id="user-display">Hola, Usuario!</strong>
+        <span id="role-badge" class="badge">Usuario</span>
+      </div>
+      <div class="topbar-actions">
+        <button type="button" id="btn-font-dec" class="btn-font-size" aria-label="Reducir tamaño de texto">A-</button>
+        <button type="button" id="btn-font-inc" class="btn-font-size" aria-label="Aumentar tamaño de texto">A+</button>
+        <button id="btn-toggle-practice" class="btn-practice hidden">Modo Práctica: OFF</button>
+        <button id="btn-open-admin" class="btn-secondary hidden">Panel Admin</button>
+        <button id="btn-logout" class="btn-danger-outline">Salir</button>
+      </div>
+    </header>
+
+    <div id="practice-banner" class="practice-banner hidden">
+      ESTÁS EN MODO PRÁCTICA — Tus cambios no afectan los datos reales ni a otros usuarios.
+    </div>
+
+    <main class="container">
+      <!-- BUSCADOR ESCRITO POR CALLE Y NÚMERO -->
+      <div class="card">
+        <h2>Buscar Edificio</h2>
+        <div class="search-grid">
+          <div>
+            <label for="input-calle">1. Calle</label>
+            <input type="text" id="input-calle" list="datalist-calles" placeholder="Escribí la calle..." autocomplete="off" />
+            <datalist id="datalist-calles"></datalist>
+          </div>
+          <div>
+            <label for="input-numero">2. Número</label>
+            <input type="text" id="input-numero" placeholder="Ej. 70" autocomplete="off" />
+          </div>
+        </div>
+        <button type="button" id="btn-search-building" class="btn-primary">Buscar Edificio</button>
+        <p id="search-feedback" class="subtitle" style="margin-top: 10px;"></p>
+      </div>
+
+      <!-- LISTADO DE TIMBRES ORDENADOS -->
+      <div id="timbres-container" class="card hidden">
+        <div class="building-header">
+          <h2 id="building-title">Edificio</h2>
+          <small>Ordenados del que hace más tiempo no se toca al más reciente</small>
+        </div>
+        <div id="timbres-list" class="timbres-list"></div>
+      </div>
+    </main>
+  </section>
+
+  <!-- PANTALLA 3: PANEL DE ADMINISTRADOR -->
+  <section id="admin-screen" class="screen">
+    <header class="topbar">
+      <strong>Panel de Administrador</strong>
+      <button id="btn-back-app" class="btn-secondary">Volver a Timbres</button>
+    </header>
+
+    <main class="container">
+      <!-- CARGA MASIVA DE EDIFICIO Y TIMBRES -->
+      <div class="card">
+        <h2>Cargar Edificio (Generación Masiva de Timbres)</h2>
+        <p class="subtitle">Indicá el rango de pisos y departamentos por piso para generar todos los timbres automáticamente.</p>
+        
+        <form id="add-building-form" class="admin-form">
+          <div class="search-grid">
+            <div>
+              <label for="new-calle">Nombre de calle</label>
+              <input type="text" id="new-calle" placeholder="Ej. Montes de Oca" required />
+            </div>
+            <div>
+              <label for="new-numero">Número</label>
+              <input type="text" id="new-numero" placeholder="Ej. 70" required />
+            </div>
+          </div>
+
+          <div class="search-grid">
+            <div>
+              <label for="piso-inicio">Desde qué piso</label>
+              <input type="number" id="piso-inicio" min="1" max="60" value="1" required />
+            </div>
+            <div>
+              <label for="piso-fin">Hasta qué piso</label>
+              <input type="number" id="piso-fin" min="1" max="60" value="5" required />
+            </div>
+          </div>
+
+          <div class="search-grid">
+            <div>
+              <label for="deptos-por-piso">Deptos por piso</label>
+              <input type="number" id="deptos-por-piso" min="1" max="26" value="4" required />
+            </div>
+            <div>
+              <label for="formato-depto">Formato de departamento</label>
+              <select id="formato-depto">
+                <option value="letras">Letras (A, B, C, D...)</option>
+                <option value="numeros">Números (1, 2, 3, 4...)</option>
+              </select>
+            </div>
+          </div>
+
+          <label class="checkbox-row">
+            <input type="checkbox" id="incluir-pb" />
+            Incluir Planta Baja (PB) con la misma cantidad de departamentos
+          </label>
+
+          <div id="preview-timbres" class="hint-box"></div>
+
+          <button type="submit" class="btn-primary">Crear Edificio con Todos sus Timbres</button>
+        </form>
+      </div>
+
+      <!-- GESTIÓN DE USUARIOS Y PERMISOS ADMIN -->
+      <div class="card">
+        <h2>Usuarios Registrados y Permisos</h2>
+        <p class="subtitle">Solo los administradores pueden otorgar o quitar el rol de Administrador a otros usuarios.</p>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Nombre y Apellido</th>
+                <th>Correo electrónico</th>
+                <th>Rol actual</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- BITÁCORA DE AUDITORÍA -->
+      <div class="card">
+        <h2>Historial de Cambios (Auditoría)</h2>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th>Fecha y Hora</th>
+                <th>Nombre y Apellido</th>
+                <th>Edificio</th>
+                <th>Timbre</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="logs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- DOCUMENTO GOOGLE SHEETS -->
+      <div class="card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px;">
+          <div>
+            <h2>Documento en la Nube (Google Sheets)</h2>
+            <p class="subtitle" style="margin: 0;">Registros actualizados en tiempo real y ordenados de la A a la Z.</p>
+          </div>
+          <button type="button" class="btn-primary" style="width: auto; margin: 0;" onclick="abrirGoogleSheetsNube()">🌐 Abrir Google Sheets</button>
+        </div>
+      </div>
+
+      <!-- ZONA DE PELIGRO: RESETEO -->
+      <div class="card" style="border-color: #fca5a5; background-color: #fef2f2;">
+        <h2 style="color: var(--danger);">Zona de Peligro: Reiniciar Fechas</h2>
+        <p class="subtitle">Coloca en cero (estado "Nunca tocado") todas las fechas y horas de visita de los edificios.</p>
+        <button type="button" id="btn-reset-dates" class="btn-danger-outline" style="width: 100%;">🔄 Reiniciar historial de todos los edificios</button>
+      </div>
+
+    </main>
+  </section>
+
+  <script src="js/app.js"></script>
+</body>
+</html>
