@@ -1,5 +1,5 @@
 // ⚠️ REEMPLAZÁ ESTA URL CON LA DE TU APLICACIÓN WEB DE GOOGLE APPS SCRIPT (termina en /exec)
-const GOOGLE_SCRIPT_URL = "https://script.google.com/u/0/home/projects/16HLTh-lkBd4cig0DqhAsNPg7m0BBmQwDnxO2e9RMo0jxsiOQ3vSQJQJg/edit";
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRlDIVgIm8NSDPljb_afo48OIIMxmdmV4vmJ5N-_a89EEJ0yhskWL0TJvqv8BtX16t/exec";
 
 // --- PERSISTENCIA PERMANENTE DE SESIÓN (LOCALSTORAGE + COOKIE HASTA 2099) ---
 function savePersistentSession(userObj) {
