@@ -160,7 +160,7 @@
     </header>
 
     <main class="container">
-      <!-- ALTA DE EDIFICIOS Y TIMBRES -->
+      <!-- ALTA DE EDIFICIOS Y TIMBRES (CON VISTA PREVIA EDITABLE) -->
       <section class="card">
         <h2>Registrar Nuevo Edificio</h2>
         <form id="add-building-form">
@@ -186,7 +186,7 @@
             </div>
             <div class="field">
               <label for="deptos-por-piso">Deptos / piso</label>
-              <input type="number" id="deptos-por-piso" value="2" min="1" max="20" required />
+              <input type="number" id="deptos-por-piso" value="2" min="0" max="20" required />
             </div>
             <div class="field">
               <label for="formato-depto">Formato</label>
@@ -202,13 +202,26 @@
             Incluir Planta Baja (PB)
           </label>
 
-          <p id="preview-timbres" class="preview-box"></p>
+          <!-- VISTA PREVIA EDITABLE DE TIMBRES -->
+          <div class="preview-editor">
+            <div class="preview-editor-head">
+              <span id="preview-timbres-count">Timbres a crear: 0</span>
+              <span class="legend">Tocá × para quitar o agregá timbres individuales abajo</span>
+            </div>
+
+            <div id="draft-timbres-list" class="chips-grid"></div>
+
+            <div class="add-custom-row">
+              <input type="text" id="custom-timbre-input" placeholder="Ej. 3° G, Portería, Local 1..." autocomplete="off" />
+              <button type="button" id="btn-add-custom-timbre" class="btn btn-outline btn-sm">Agregar timbre</button>
+            </div>
+          </div>
 
           <button type="submit" class="btn btn-primary">Guardar Edificio y Timbres</button>
         </form>
       </section>
 
-      <!-- EDIFICIOS REGISTRADOS -->
+      <!-- EDIFICIOS REGISTRADOS (EDITAR TIMBRES O ELIMINAR EDIFICIO) -->
       <section class="card">
         <h2>Edificios Registrados</h2>
         <div class="table-wrap">
@@ -217,11 +230,24 @@
               <tr>
                 <th>Calle y Número</th>
                 <th>Timbres</th>
-                <th>Acción</th>
+                <th>Acciones</th>
               </tr>
             </thead>
             <tbody id="buildings-tbody"></tbody>
           </table>
+        </div>
+
+        <!-- EDITOR INDIVIDUAL DE TIMBRES DE UN EDIFICIO YA EXISTENTE -->
+        <div id="edit-building-panel" class="edit-building-box hidden">
+          <div class="section-head">
+            <h3 id="edit-building-title">Editando timbres</h3>
+            <button type="button" id="btn-close-edit-building" class="btn btn-ghost btn-sm">Cerrar editor</button>
+          </div>
+          <div id="edit-building-chips" class="chips-grid"></div>
+          <div class="add-custom-row">
+            <input type="text" id="edit-custom-timbre-input" placeholder="Nuevo timbre (ej. 2° G, PB Local)..." autocomplete="off" />
+            <button type="button" id="btn-save-edit-timbre" class="btn btn-primary btn-sm">Agregar al edificio</button>
+          </div>
         </div>
       </section>
 

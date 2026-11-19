@@ -84,6 +84,8 @@ const INITIAL_BUILDINGS = [
 
 let currentUser = getPersistentSession();
 let selectedBuildingId = null;
+let draftTimbres = [];
+let editingBuildingId = null;
 
 function getDB() {
   let data = null;
@@ -111,7 +113,6 @@ async function loadFromGoogleSheets() {
     const json = await res.json();
 
     if (json.status === "ok") {
-      // 1. Sincronizar usuarios registrados desde la nube
       if (json.users && Object.keys(json.users).length > 0) {
         const cloudUsers = {};
         Object.keys(json.users).forEach((email) => {
@@ -124,7 +125,6 @@ async function loadFromGoogleSheets() {
         localStorage.setItem("registered_users", JSON.stringify(cloudUsers));
       }
 
-      // 2. Sincronizar edificios y timbres desde Google Sheets
       if (Array.isArray(json.timbres)) {
         const currentReal = getDB();
         const mapEdificios = {};
@@ -179,6 +179,8 @@ function showScreen(screenId) {
 }
 
 async function init() {
+  regenerateDraftTimbres();
+
   if (currentUser && currentUser.email) {
     const users = getUsersDB();
     if (!users[currentUser.email]) {
@@ -202,13 +204,11 @@ async function init() {
       savePersistentSession(currentUser);
       showApp();
     } else {
-      // Si el administrador eliminó esta cuenta, cierra sesión
       clearPersistentSession();
       currentUser = null;
       showScreen("login-screen");
     }
   }
-  updateBuildingPreview();
 }
 
 // --- 4. LOGIN Y REGISTRO ---
@@ -504,7 +504,8 @@ window.marcarTimbre = async function (timbreId, accion) {
 document.getElementById("btn-open-admin").addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   showScreen("admin-screen");
-  updateBuildingPreview();
+  if (draftTimbres.length === 0) regenerateDraftTimbres();
+  renderDraftTimbres();
   renderBuildingsAdmin();
   renderUsersAdmin();
   renderLogs();
@@ -550,10 +551,11 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
   }
 });
 
+// --- GENERADOR BASE + EDICION INDIVIDUAL DE TIMBRES ---
 function generateDeptoLabels() {
   const inicio = parseInt(document.getElementById("piso-inicio").value, 10) || 1;
   const fin = parseInt(document.getElementById("piso-fin").value, 10) || 1;
-  const porPiso = parseInt(document.getElementById("deptos-por-piso").value, 10) || 1;
+  const porPiso = Math.max(0, parseInt(document.getElementById("deptos-por-piso").value, 10) || 0);
   const formato = document.getElementById("formato-depto").value;
   const incluirPB = document.getElementById("incluir-pb").checked;
 
@@ -569,25 +571,72 @@ function generateDeptoLabels() {
   return etiquetas;
 }
 
-function updateBuildingPreview() {
-  const preview = document.getElementById("preview-timbres");
-  if (!preview) return;
-  const lista = generateDeptoLabels();
-  preview.innerHTML = `Se generarán <strong>${lista.length} timbres</strong> (${lista.slice(0, 5).join(", ")}...).`;
+function regenerateDraftTimbres() {
+  draftTimbres = generateDeptoLabels();
+  renderDraftTimbres();
 }
+
+function renderDraftTimbres() {
+  const countEl = document.getElementById("preview-timbres-count");
+  const container = document.getElementById("draft-timbres-list");
+  if (!countEl || !container) return;
+
+  countEl.textContent = `Timbres a crear: ${draftTimbres.length}`;
+  container.innerHTML = draftTimbres.length
+    ? draftTimbres.map((label, idx) => `
+        <span class="timbre-chip">
+          ${label}
+          <button type="button" onclick="removeDraftTimbre(${idx})" title="Quitar timbre">×</button>
+        </span>
+      `).join("")
+    : '<span class="legend">Sin timbres en la lista. Agregá alguno abajo.</span>';
+}
+
+window.removeDraftTimbre = function (idx) {
+  draftTimbres.splice(idx, 1);
+  renderDraftTimbres();
+};
+
+function addCustomDraftTimbre() {
+  const input = document.getElementById("custom-timbre-input");
+  const val = input.value.trim();
+  if (!val) return;
+
+  if (draftTimbres.some((t) => normalizeText(t) === normalizeText(val))) {
+    alert("Ese timbre ya está en la lista.");
+    return;
+  }
+
+  draftTimbres.push(val);
+  input.value = "";
+  renderDraftTimbres();
+}
+
+document.getElementById("btn-add-custom-timbre")?.addEventListener("click", addCustomDraftTimbre);
+document.getElementById("custom-timbre-input")?.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    addCustomDraftTimbre();
+  }
+});
 
 ["piso-inicio", "piso-fin", "deptos-por-piso", "formato-depto", "incluir-pb"].forEach((id) => {
   const el = document.getElementById(id);
-  if (el) el.addEventListener("input", updateBuildingPreview);
+  if (el) el.addEventListener("input", regenerateDraftTimbres);
 });
 
 document.getElementById("add-building-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.rol !== "admin") return;
 
+  if (draftTimbres.length === 0) {
+    alert("Agregá al menos un timbre antes de guardar el edificio.");
+    return;
+  }
+
   const calle = document.getElementById("new-calle").value.trim();
   const numero = document.getElementById("new-numero").value.trim();
-  const etiquetas = generateDeptoLabels();
+  const etiquetas = [...draftTimbres];
 
   const db = getDB();
   const existingIdx = db.buildings.findIndex(
@@ -623,17 +672,17 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   renderBuildingsAdmin();
 
   e.target.reset();
-  updateBuildingPreview();
+  regenerateDraftTimbres();
 
   const ok = await syncToGoogleSheets(true);
   refreshSheetIframe();
 
   if (ok) {
-    alert(`Edificio ${calle} ${numero} guardado y sincronizado en la planilla.`);
+    alert(`Edificio ${calle} ${numero} guardado y sincronizado con ${nuevosTimbres.length} timbres.`);
   }
 });
 
-// --- GESTION Y ELIMINACION DE EDIFICIOS ---
+// --- GESTION, EDICION DE TIMBRES Y ELIMINACION DE EDIFICIOS ---
 function renderBuildingsAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
   const tbody = document.getElementById("buildings-tbody");
@@ -651,14 +700,143 @@ function renderBuildingsAdmin() {
           <td><strong>${b.calle} ${b.numero}</strong></td>
           <td>${b.timbres.length} timbres</td>
           <td>
-            <button type="button" class="btn-table btn-no-tocar" onclick="eliminarEdificio('${b.id}')">
-              Eliminar
-            </button>
+            <div class="user-actions-cell">
+              <button type="button" class="btn-table btn-habilitar" onclick="abrirEditorTimbres('${b.id}')">
+                Editar timbres
+              </button>
+              <button type="button" class="btn-table btn-no-tocar" onclick="eliminarEdificio('${b.id}')">
+                Eliminar
+              </button>
+            </div>
           </td>
         </tr>
       `).join("")
     : '<tr><td colspan="3">No hay edificios registrados.</td></tr>';
+
+  if (editingBuildingId) {
+    renderEditBuildingPanel();
+  }
 }
+
+window.abrirEditorTimbres = function (buildingId) {
+  editingBuildingId = buildingId;
+  renderEditBuildingPanel();
+};
+
+function renderEditBuildingPanel() {
+  const panel = document.getElementById("edit-building-panel");
+  const title = document.getElementById("edit-building-title");
+  const chips = document.getElementById("edit-building-chips");
+  if (!panel || !title || !chips) return;
+
+  const db = getDB();
+  const building = db.buildings.find((b) => b.id === editingBuildingId);
+  if (!building) {
+    panel.classList.add("hidden");
+    editingBuildingId = null;
+    return;
+  }
+
+  panel.classList.remove("hidden");
+  title.textContent = `Editando timbres: ${building.calle} ${building.numero} (${building.timbres.length})`;
+
+  chips.innerHTML = building.timbres.length
+    ? building.timbres.map((t) => `
+        <span class="timbre-chip">
+          ${t.depto}
+          <button type="button" onclick="quitarTimbreEdificio('${building.id}', '${t.id}')" title="Quitar timbre">×</button>
+        </span>
+      `).join("")
+    : '<span class="legend">Este edificio no tiene timbres.</span>';
+}
+
+document.getElementById("btn-close-edit-building")?.addEventListener("click", () => {
+  editingBuildingId = null;
+  document.getElementById("edit-building-panel")?.classList.add("hidden");
+});
+
+window.quitarTimbreEdificio = async function (buildingId, timbreId) {
+  if (!currentUser || currentUser.rol !== "admin") return;
+
+  const db = getDB();
+  const building = db.buildings.find((b) => b.id === buildingId);
+  if (!building) return;
+
+  const timbre = building.timbres.find((t) => t.id === timbreId);
+  if (!timbre) return;
+
+  if (!confirm(`¿Quitar el timbre "${timbre.depto}" de ${building.calle} ${building.numero}?`)) return;
+
+  building.timbres = building.timbres.filter((t) => t.id !== timbreId);
+
+  db.logs.unshift({
+    fecha: formatFechaRegistro(Date.now()),
+    usuario: currentUser.nombre,
+    email: currentUser.email,
+    edificio: `${building.calle} ${building.numero}`,
+    timbre: timbre.depto,
+    accion: "TIMBRE QUITADO"
+  });
+
+  saveDB(db);
+  renderBuildingsAdmin();
+  renderLogs();
+  if (selectedBuildingId === buildingId) renderTimbres();
+
+  await syncToGoogleSheets(false);
+  refreshSheetIframe();
+};
+
+async function agregarTimbreEdificioExistente() {
+  if (!currentUser || currentUser.rol !== "admin" || !editingBuildingId) return;
+
+  const input = document.getElementById("edit-custom-timbre-input");
+  const depto = input.value.trim();
+  if (!depto) return;
+
+  const db = getDB();
+  const building = db.buildings.find((b) => b.id === editingBuildingId);
+  if (!building) return;
+
+  if (building.timbres.some((t) => normalizeText(t.depto) === normalizeText(depto))) {
+    alert("Ese timbre ya existe en este edificio.");
+    return;
+  }
+
+  building.timbres.push({
+    id: `t_${Date.now()}`,
+    depto,
+    estado: "disponible",
+    ultimaVisita: 0,
+    ultimaVisitaTexto: "Nunca tocado"
+  });
+
+  db.logs.unshift({
+    fecha: formatFechaRegistro(Date.now()),
+    usuario: currentUser.nombre,
+    email: currentUser.email,
+    edificio: `${building.calle} ${building.numero}`,
+    timbre: depto,
+    accion: "TIMBRE AGREGADO"
+  });
+
+  input.value = "";
+  saveDB(db);
+  renderBuildingsAdmin();
+  renderLogs();
+  if (selectedBuildingId === editingBuildingId) renderTimbres();
+
+  await syncToGoogleSheets(false);
+  refreshSheetIframe();
+}
+
+document.getElementById("btn-save-edit-timbre")?.addEventListener("click", agregarTimbreEdificioExistente);
+document.getElementById("edit-custom-timbre-input")?.addEventListener("keypress", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    agregarTimbreEdificioExistente();
+  }
+});
 
 window.eliminarEdificio = async function (buildingId) {
   if (!currentUser || currentUser.rol !== "admin") return;
@@ -675,6 +853,10 @@ window.eliminarEdificio = async function (buildingId) {
   if (selectedBuildingId === buildingId) {
     selectedBuildingId = null;
     document.getElementById("timbres-container")?.classList.add("hidden");
+  }
+  if (editingBuildingId === buildingId) {
+    editingBuildingId = null;
+    document.getElementById("edit-building-panel")?.classList.add("hidden");
   }
 
   db.logs.unshift({
