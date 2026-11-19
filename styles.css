@@ -9,7 +9,6 @@
   --accent-dark: #2c2a26;
   --accent-dark-hover: #141311;
 
-  /* Únicos acentos funcionales sobrios */
   --state-visitado-bg: #eef4ee;
   --state-visitado-text: #285230;
   --state-visitado-border: #8eb394;
@@ -453,6 +452,22 @@ select:focus {
   font-size: 0.82rem;
 }
 
+/* Planilla Google Sheets incrustada */
+.sheet-embed-wrap {
+  width: 100%;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  overflow: hidden;
+  background-color: var(--bg-page);
+}
+
+.sheet-embed-wrap iframe {
+  display: block;
+  width: 100%;
+  height: 380px;
+  border: none;
+}
+
 /* Tablas */
 .table-wrap {
   width: 100%;
@@ -507,19 +522,4 @@ th {
   .timbre-actions button {
     flex: 1;
   }
-}
-
-.sheet-embed-wrap {
-  width: 100%;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  overflow: hidden;
-  background-color: var(--bg-page);
-}
-
-.sheet-embed-wrap iframe {
-  display: block;
-  width: 100%;
-  height: 380px;
-  border: none;
 }

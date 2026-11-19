@@ -1,7 +1,6 @@
-// ⚠️ REEMPLAZÁ ESTA URL CON LA DE TU APLICACIÓN WEB DE GOOGLE APPS SCRIPT (termina en /exec)
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRlDIVgIm8NSDPljb_afo48OIIMxmdmV4vmJ5N-_a89EEJ0yhskWL0TJvqv8BtX16t/exec";
 
-// --- PERSISTENCIA PERMANENTE DE SESIÓN (LOCALSTORAGE + COOKIE HASTA 2099) ---
+// --- PERSISTENCIA PERMANENTE DE SESION ---
 function savePersistentSession(userObj) {
   const jsonStr = JSON.stringify(userObj);
   localStorage.setItem("session_user", jsonStr);
@@ -29,7 +28,6 @@ function clearPersistentSession() {
   document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
 }
 
-// --- 1. GESTIÓN PERMANENTE DE USUARIOS (NUNCA SE ELIMINAN) ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
@@ -43,7 +41,6 @@ function getUsersDB() {
   if (!users || typeof users !== "object") {
     users = { ...DEFAULT_USERS };
   }
-  // Garantiza que el admin principal siempre exista
   if (!users["admin@app.com"]) {
     users["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
   }
@@ -66,17 +63,16 @@ function hasAssignedName(userObj, email) {
   );
 }
 
-// --- 2. DATOS INICIALES Y ALMACENAMIENTO PERMANENTE DE EDIFICIOS ---
-const INITIAL_BUILDINGS = [
+const INITIAL_BUILDINGS = [ //almaceno los datitos iniciales de los edificios
   {
     id: "ed1",
     calle: "Montes de Oca",
     numero: "70",
     timbres: [
-      { id: "t1", depto: "1° A", estado: "disponible", ultimaVisita: 1700000000000 },
-      { id: "t2", depto: "1° B", estado: "disponible", ultimaVisita: 1710000000000 },
-      { id: "t3", depto: "2° A", estado: "no_tocar", ultimaVisita: 1705000000000 },
-      { id: "t4", depto: "4° A", estado: "disponible", ultimaVisita: 0 }
+      { id: "t1", depto: "1° A", estado: "disponible", ultimaVisita: 1700000000000, ultimaVisitaTexto: "Nunca tocado" },
+      { id: "t2", depto: "1° B", estado: "disponible", ultimaVisita: 1710000000000, ultimaVisitaTexto: "Nunca tocado" },
+      { id: "t3", depto: "2° A", estado: "no_tocar", ultimaVisita: 1705000000000, ultimaVisitaTexto: "Nunca tocado" },
+      { id: "t4", depto: "4° A", estado: "disponible", ultimaVisita: 0, ultimaVisitaTexto: "Nunca tocado" }
     ]
   }
 ];
@@ -106,8 +102,7 @@ function saveDB(data) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-// --- SINCRONIZACIÓN DE LECTURA DESDE GOOGLE SHEETS (FUSIÓN SIN BORRAR NADA) ---
-async function loadFromGoogleSheets() {
+async function loadFromGoogleSheets() { // Esto es para el google sheets (ver)
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
 
   try {
@@ -115,7 +110,7 @@ async function loadFromGoogleSheets() {
     const json = await res.json();
 
     if (json.status === "ok") {
-      // 1. Fusionar usuarios: nunca elimina usuarios locales ni de la nube
+      // 1. Fusionar usuarios registrados
       if (json.users && Object.keys(json.users).length > 0) {
         const localUsers = getUsersDB();
         const mergedUsers = { ...localUsers };
@@ -129,18 +124,14 @@ async function loadFromGoogleSheets() {
         localStorage.setItem("registered_users", JSON.stringify(mergedUsers));
       }
 
-      // 2. Fusionar edificios y timbres: preserva todo lo registrado para siempre
-      if (json.timbres && json.timbres.length > 0) {
+      if (Array.isArray(json.timbres)) {
         const currentReal = getDB();
         const mapEdificios = {};
-
-        // Primero cargamos los edificios que ya están guardados localmente
         currentReal.buildings.forEach((b) => {
           const key = `${b.calle.trim().toLowerCase()}_${b.numero.trim().toLowerCase()}`;
           mapEdificios[key] = b;
         });
 
-        // Luego incorporamos/actualizamos con lo que viene de Google Sheets
         const cloudEdificios = {};
         json.timbres.forEach((row, index) => {
           const key = `${row.calle.trim().toLowerCase()}_${row.numero.trim().toLowerCase()}`;
@@ -161,34 +152,32 @@ async function loadFromGoogleSheets() {
             timestamp = isNaN(parsed) ? Date.now() - (json.timbres.length - index) * 1000 : parsed;
           }
 
+          const estadoNorm = String(row.estado || "").toLowerCase();
           cloudEdificios[key].timbres.push({
             id: `t_cloud_${index}`,
             depto: row.timbre,
-            estado: row.estado.toLowerCase() === "no_tocar" ? "no_tocar" : (row.estado.toLowerCase() === "visitado" ? "visitado" : "disponible"),
+            estado: estadoNorm === "no_tocar" ? "no_tocar" : (estadoNorm === "visitado" ? "visitado" : "disponible"),
             ultimaVisita: timestamp,
-            ultimaVisitaTexto: row.ultimaVisita
+            ultimaVisitaTexto: row.ultimaVisita || "Nunca tocado"
           });
         });
 
-        // Combinamos: si un edificio existe localmente y aún no subió a la nube, NO se borra
-        const finalMap = { ...mapEdificios, ...cloudEdificios };
-        currentReal.buildings = Object.values(finalMap);
+        currentReal.buildings = Object.values(cloudEdificios);
         localStorage.setItem("db_real", JSON.stringify(currentReal));
       }
     }
   } catch (err) {
-    console.warn("Sincronización en segundo plano usando respaldo local:", err);
+    console.warn("Usando respaldo local:", err);
   }
 }
 
-// --- 3. NAVEGACIÓN ENTRE PANTALLAS ---
+
 function showScreen(screenId) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   document.getElementById(screenId).classList.add("active");
 }
 
 async function init() {
-  // Asegura que el usuario actual siga registrado en la base permanente
   if (currentUser && currentUser.email) {
     const users = getUsersDB();
     if (!users[currentUser.email]) {
@@ -202,7 +191,6 @@ async function init() {
     showApp();
   }
 
-  // Sincroniza en segundo plano con Google Sheets
   await loadFromGoogleSheets();
 
   if (currentUser) {
@@ -217,7 +205,7 @@ async function init() {
   updateBuildingPreview();
 }
 
-// --- 4. LOGIN Y REGISTRO PERMANENTE ---
+// registro permanente de usuario en celu
 const emailInput = document.getElementById("login-email");
 const nameGroup = document.getElementById("name-field-group");
 const nameInput = document.getElementById("login-name");
@@ -238,7 +226,7 @@ function checkEmailNeedsName() {
   if (!userRecord || !hasAssignedName(userRecord, email)) {
     nameGroup.classList.remove("hidden");
     nameInput.required = true;
-    submitBtn.textContent = userRecord ? "Guardar Nombre e Ingresar" : "Registrarme e Ingresar";
+    submitBtn.textContent = userRecord ? "Guardar nombre e ingresar" : "Registrarme e ingresar";
   } else {
     nameGroup.classList.add("hidden");
     nameInput.required = false;
@@ -272,7 +260,6 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
     if (existingUser.pass !== pass) {
       errorEl.textContent = "Contraseña incorrecta para este correo.";
       submitBtn.textContent = "Ingresar";
-      alert("⚠️ Contraseña incorrecta. Verificá tu clave.");
       return;
     }
 
@@ -343,7 +330,7 @@ document.getElementById("reset-form").addEventListener("submit", async (e) => {
 
   users[email].pass = newPass;
   saveUsersDB(users);
-  alert("✅ Contraseña actualizada con éxito.");
+  alert("Contraseña actualizada.");
   e.target.reset();
   showScreen("login-screen");
 });
@@ -357,7 +344,7 @@ document.getElementById("btn-logout").addEventListener("click", () => {
 
 function showApp() {
   showScreen("app-screen");
-  document.getElementById("user-display").textContent = `Hola, ${currentUser.nombre}!`;
+  document.getElementById("user-display").textContent = currentUser.nombre;
   document.getElementById("role-badge").textContent = currentUser.rol.toUpperCase();
 
   const btnAdmin = document.getElementById("btn-open-admin");
@@ -379,7 +366,7 @@ document.getElementById("btn-toggle-practice").addEventListener("click", (e) => 
   if (!currentUser || currentUser.rol !== "admin") return;
 
   isPracticeMode = !isPracticeMode;
-  e.target.textContent = `Modo Práctica: ${isPracticeMode ? "ON" : "OFF"}`;
+  e.target.textContent = `Práctica: ${isPracticeMode ? "ON" : "OFF"}`;
   e.target.classList.toggle("on", isPracticeMode);
   document.getElementById("practice-banner").classList.toggle("hidden", !isPracticeMode);
   selectedBuildingId = null;
@@ -411,7 +398,7 @@ async function ejecutarBusqueda() {
   const feedback = document.getElementById("search-feedback");
 
   if (!calleBuscada || !numeroBuscado) {
-    feedback.textContent = "Escribí calle y número.";
+    feedback.textContent = "Completá calle y número.";
     document.getElementById("timbres-container").classList.add("hidden");
     return;
   }
@@ -458,26 +445,27 @@ function renderTimbres() {
   list.innerHTML = "";
 
   sorted.forEach((t) => {
-    const fechaTexto = t.ultimaVisita === 0
-      ? "Nunca tocado"
-      : (t.ultimaVisitaTexto && t.ultimaVisitaTexto !== "Nunca tocado"
-          ? `Última vez: ${t.ultimaVisitaTexto}`
-          : `Última vez: ${new Date(t.ultimaVisita).toLocaleDateString()} ${new Date(t.ultimaVisita).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
+    const hasFecha = t.ultimaVisitaTexto && t.ultimaVisitaTexto !== "Nunca tocado";
+    const fechaTexto = hasFecha
+      ? `Último registro: ${t.ultimaVisitaTexto}`
+      : (t.ultimaVisita === 0
+          ? "Sin registros previos"
+          : `Último registro: ${new Date(t.ultimaVisita).toLocaleDateString()} ${new Date(t.ultimaVisita).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
 
     const isNoTocar = t.estado === "no_tocar";
 
     list.innerHTML += `
       <div class="timbre-item ${isNoTocar ? "no-tocar" : ""}">
         <div class="timbre-info">
-          <strong>${t.depto} ${isNoTocar ? "(NO TOCAR)" : ""}</strong>
+          <strong>${t.depto} ${isNoTocar ? "— NO TOCAR" : ""}</strong>
           <span>${fechaTexto}</span>
         </div>
         <div class="timbre-actions">
           ${!isNoTocar ? `
-            <button class="btn-visitado" onclick="marcarTimbre('${t.id}', 'visitado')">Ya visitado</button>
-            <button class="btn-no-tocar" onclick="marcarTimbre('${t.id}', 'no_tocar')">No tocar</button>
+            <button type="button" class="btn-visitado" onclick="marcarTimbre('${t.id}', 'visitado')">Visitado</button>
+            <button type="button" class="btn-no-tocar" onclick="marcarTimbre('${t.id}', 'no_tocar')">No tocar</button>
           ` : `
-            <button class="btn-habilitar" onclick="marcarTimbre('${t.id}', 'habilitar')">Habilitar</button>
+            <button type="button" class="btn-habilitar" onclick="marcarTimbre('${t.id}', 'habilitar')">Habilitar</button>
           `}
         </div>
       </div>
@@ -485,28 +473,42 @@ function renderTimbres() {
   });
 }
 
+function formatFechaRegistro(ts) {
+  const d = new Date(ts);
+  const fecha = d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  const hora = d.toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" });
+  return `${fecha} ${hora}`;
+}
+
 window.marcarTimbre = async function (timbreId, accion) {
   const db = getDB();
   const building = db.buildings.find((b) => b.id === selectedBuildingId);
   const timbre = building.timbres.find((t) => t.id === timbreId);
 
+  const ahora = Date.now();
+  const fechaFormateada = formatFechaRegistro(ahora);
+
   if (accion === "visitado") {
-    timbre.ultimaVisita = Date.now();
-    timbre.ultimaVisitaTexto = new Date(timbre.ultimaVisita).toLocaleString();
+    timbre.ultimaVisita = ahora;
+    timbre.ultimaVisitaTexto = fechaFormateada;
     timbre.estado = "visitado";
   } else if (accion === "no_tocar") {
+    timbre.ultimaVisita = ahora;
+    timbre.ultimaVisitaTexto = fechaFormateada;
     timbre.estado = "no_tocar";
   } else if (accion === "habilitar") {
+    timbre.ultimaVisita = ahora;
+    timbre.ultimaVisitaTexto = fechaFormateada;
     timbre.estado = "disponible";
   }
 
   db.logs.unshift({
-    fecha: new Date().toLocaleString(),
+    fecha: fechaFormateada,
     usuario: currentUser.nombre,
     email: currentUser.email,
     edificio: `${building.calle} ${building.numero}`,
     timbre: timbre.depto,
-    accion: accion.toUpperCase()
+    accion: accion === "visitado" ? "VISITADO" : (accion === "no_tocar" ? "NO TOCAR" : "HABILITADO")
   });
 
   saveDB(db);
@@ -514,14 +516,15 @@ window.marcarTimbre = async function (timbreId, accion) {
   await syncToGoogleSheets();
 };
 
-// --- 8. PANEL DE ADMINISTRACIÓN ---
 document.getElementById("btn-open-admin").addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   showScreen("admin-screen");
   updateBuildingPreview();
+  renderBuildingsAdmin();
   renderUsersAdmin();
   renderLogs();
   await loadFromGoogleSheets();
+  renderBuildingsAdmin();
   renderUsersAdmin();
   renderLogs();
 });
@@ -532,7 +535,7 @@ document.getElementById("btn-back-app").addEventListener("click", () => {
 
 document.getElementById("btn-reset-dates")?.addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
-  if (!confirm("⚠️ ¿Reiniciar todas las fechas de todos los edificios a 'Nunca tocado'? (Los edificios y timbres seguirán guardados).")) return;
+  if (!confirm("¿Reiniciar todas las fechas de los edificios a 'Nunca tocado'?")) return;
 
   const db = getDB();
   db.buildings.forEach((b) => {
@@ -544,20 +547,21 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
   });
 
   db.logs.unshift({
-    fecha: new Date().toLocaleString(),
+    fecha: formatFechaRegistro(Date.now()),
     usuario: currentUser.nombre,
     email: currentUser.email,
     edificio: "TODOS",
     timbre: "SISTEMA",
-    accion: "REINICIO TOTAL DE FECHAS"
+    accion: "REINICIO DE FECHAS"
   });
 
   saveDB(db);
   renderLogs();
   const ok = await syncToGoogleSheets(true);
+  refreshSheetIframe();
 
   if (ok) {
-    alert("✅ Historial reiniciado y actualizado en Google Sheets.");
+    alert("Fechas reiniciadas y actualizadas en la planilla.");
   }
 });
 
@@ -584,7 +588,7 @@ function updateBuildingPreview() {
   const preview = document.getElementById("preview-timbres");
   if (!preview) return;
   const lista = generateDeptoLabels();
-  preview.innerHTML = `Se generarán <strong>${lista.length} timbres</strong> (ej. ${lista.slice(0, 5).join(", ")}...).`;
+  preview.innerHTML = `Se generarán <strong>${lista.length} timbres</strong> (${lista.slice(0, 5).join(", ")}...).`;
 }
 
 ["piso-inicio", "piso-fin", "deptos-por-piso", "formato-depto", "incluir-pb"].forEach((id) => {
@@ -592,7 +596,6 @@ function updateBuildingPreview() {
   if (el) el.addEventListener("input", updateBuildingPreview);
 });
 
-// ALTA PERMANENTE DE EDIFICIOS Y TIMBRES (NUNCA SE ELIMINAN)
 document.getElementById("add-building-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.rol !== "admin") return;
@@ -615,7 +618,6 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   }));
 
   if (existingIdx !== -1) {
-    // Si el edificio ya existía, agrega solo los timbres que no existan sin borrar los anteriores
     const existentesDeptos = new Set(db.buildings[existingIdx].timbres.map((t) => normalizeText(t.depto)));
     nuevosTimbres.forEach((nt) => {
       if (!existentesDeptos.has(normalizeText(nt.depto))) {
@@ -633,17 +635,86 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
 
   saveDB(db);
   updateCalleSuggestions();
+  renderBuildingsAdmin();
 
   e.target.reset();
   updateBuildingPreview();
 
   const ok = await syncToGoogleSheets(true);
+  refreshSheetIframe();
+
   if (ok) {
-    alert(`✅ Edificio ${calle} ${numero} registrado permanentemente con ${nuevosTimbres.length} timbres.`);
+    alert(`Edificio ${calle} ${numero} guardado y sincronizado en la planilla.`);
   }
 });
 
-// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ADMIN) ---
+// es para sacar edificios en caso de error de tipeo (ver)
+function renderBuildingsAdmin() {
+  if (!currentUser || currentUser.rol !== "admin") return;
+  const tbody = document.getElementById("buildings-tbody");
+  if (!tbody) return;
+
+  const db = getDB();
+  const ordenados = [...db.buildings].sort((a, b) => {
+    const cmp = a.calle.localeCompare(b.calle);
+    return cmp !== 0 ? cmp : a.numero.localeCompare(b.numero, undefined, { numeric: true });
+  });
+
+  tbody.innerHTML = ordenados.length
+    ? ordenados.map((b) => `
+        <tr>
+          <td><strong>${b.calle} ${b.numero}</strong></td>
+          <td>${b.timbres.length} timbres</td>
+          <td>
+            <button type="button" class="btn-table btn-no-tocar" onclick="eliminarEdificio('${b.id}')">
+              Eliminar
+            </button>
+          </td>
+        </tr>
+      `).join("")
+    : '<tr><td colspan="3">No hay edificios registrados.</td></tr>';
+}
+
+window.eliminarEdificio = async function (buildingId) {
+  if (!currentUser || currentUser.rol !== "admin") return;
+
+  const db = getDB();
+  const target = db.buildings.find((b) => b.id === buildingId);
+  if (!target) return;
+
+  const confirmar = confirm(`¿Eliminar "${target.calle} ${target.numero}" y sus ${target.timbres.length} timbres de la aplicación y de Google Sheets?`);
+  if (!confirmar) return;
+
+  db.buildings = db.buildings.filter((b) => b.id !== buildingId);
+
+  if (selectedBuildingId === buildingId) {
+    selectedBuildingId = null;
+    document.getElementById("timbres-container")?.classList.add("hidden");
+  }
+
+  db.logs.unshift({
+    fecha: formatFechaRegistro(Date.now()),
+    usuario: currentUser.nombre,
+    email: currentUser.email,
+    edificio: `${target.calle} ${target.numero}`,
+    timbre: "TODOS",
+    accion: "EDIFICIO ELIMINADO"
+  });
+
+  saveDB(db);
+  updateCalleSuggestions();
+  renderBuildingsAdmin();
+  renderLogs();
+
+  const ok = await syncToGoogleSheets(true);
+  refreshSheetIframe();
+
+  if (ok) {
+    alert(`Se eliminó "${target.calle} ${target.numero}" de la aplicación y de la planilla.`);
+  }
+};
+
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -662,13 +733,13 @@ function renderUsersAdmin() {
     const isAdmin = u.rol === "admin";
     const isSelf = currentUser.email.toLowerCase() === email.toLowerCase();
     const isRootAdmin = email.toLowerCase() === "admin@app.com";
-    const nombreUsuario = u.nombre && u.nombre.trim() !== "" ? u.nombre : "Sin nombre registrado";
+    const nombreUsuario = u.nombre && u.nombre.trim() !== "" ? u.nombre : "Sin nombre";
 
     let accionHTML = "";
     if (isRootAdmin) {
-      accionHTML = `<small>Admin Principal</small>`;
+      accionHTML = `<span class="legend">Principal</span>`;
     } else if (isSelf) {
-      accionHTML = `<small>Tu cuenta actual</small>`;
+      accionHTML = `<span class="legend">Tu cuenta</span>`;
     } else {
       accionHTML = `
         <button
@@ -702,8 +773,8 @@ window.toggleUserRole = async function (email) {
   saveUsersDB(users);
   renderUsersAdmin();
 
-  const accionTexto = nuevoRol === "admin" ? "otorgados permisos de Administrador a" : "quitados los permisos de Administrador a";
-  alert(`✅ Permisos actualizados: ${accionTexto} ${users[email].nombre || email}.`);
+  const accionTexto = nuevoRol === "admin" ? "Permisos de administrador asignados a" : "Permisos de administrador retirados a";
+  alert(`${accionTexto} ${users[email].nombre || email}.`);
 };
 
 function renderLogs() {
@@ -726,10 +797,9 @@ function renderLogs() {
           </tr>
         `;
       }).join("")
-    : '<tr><td colspan="5">Sin movimientos.</td></tr>';
+    : '<tr><td colspan="5">Sin movimientos registrados.</td></tr>';
 }
 
-// --- 10. GOOGLE SHEETS (ESCRITURA EN LA NUBE) ---
 async function syncUsersToCloud(users) {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
   try {
@@ -737,7 +807,7 @@ async function syncUsersToCloud(users) {
     formBody.append("payload", JSON.stringify({ users }));
     await fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", body: formBody });
   } catch (err) {
-    console.error("Error guardando usuarios en la nube:", err);
+    console.error("Error guardando usuarios:", err);
   }
 }
 
@@ -754,9 +824,9 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
   let rows = [];
   edificiosOrdenados.forEach((ed) => {
     ed.timbres.forEach((t) => {
-      const fechaTexto = t.ultimaVisita === 0
-        ? "Nunca tocado"
-        : (t.ultimaVisitaTexto || new Date(t.ultimaVisita).toLocaleString());
+      const fechaTexto = t.ultimaVisitaTexto && t.ultimaVisitaTexto !== ""
+        ? t.ultimaVisitaTexto
+        : (t.ultimaVisita === 0 ? "Nunca tocado" : formatFechaRegistro(t.ultimaVisita));
 
       rows.push({
         territorio: ed.territorio || "XX",
@@ -772,7 +842,7 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
 
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) {
     if (mostrarAlertas) {
-      alert("⚠️ Guardado localmente, pero falta configurar GOOGLE_SCRIPT_URL en app.js.");
+      alert("Guardado localmente. Falta configurar GOOGLE_SCRIPT_URL en app.js.");
     }
     return false;
   }
@@ -790,11 +860,23 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
   } catch (err) {
     console.error("Error sincronizando con Google Sheets:", err);
     if (mostrarAlertas) {
-      alert("❌ Error de red al intentar enviar los datos a Google Sheets.");
+      alert("Error de conexión al sincronizar con la planilla.");
     }
     return false;
   }
 }
+
+function refreshSheetIframe() {
+  const iframe = document.getElementById("google-sheet-iframe");
+  if (iframe) {
+    iframe.src = `https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?widget=true&headers=false&t=${Date.now()}`;
+  }
+}
+
+document.getElementById("btn-refresh-sheet")?.addEventListener("click", async () => {
+  await syncToGoogleSheets(false);
+  refreshSheetIframe();
+});
 
 window.abrirGoogleSheetsNube = async function () {
   await syncToGoogleSheets(false);
@@ -802,9 +884,9 @@ window.abrirGoogleSheetsNube = async function () {
 };
 
 // --- 11. ACCESIBILIDAD (A- / A+) ---
-const MIN_FONT = 15;
-const MAX_FONT = 24;
-let currentFontSize = parseInt(localStorage.getItem("custom_font_size"), 10) || 17;
+const MIN_FONT = 14;
+const MAX_FONT = 22;
+let currentFontSize = parseInt(localStorage.getItem("custom_font_size"), 10) || 16;
 
 function applyFontSize(size) {
   currentFontSize = Math.min(MAX_FONT, Math.max(MIN_FONT, size));
@@ -816,13 +898,5 @@ applyFontSize(currentFontSize);
 
 document.getElementById("btn-font-dec")?.addEventListener("click", () => applyFontSize(currentFontSize - 1.5));
 document.getElementById("btn-font-inc")?.addEventListener("click", () => applyFontSize(currentFontSize + 1.5));
-
-document.getElementById("btn-refresh-sheet")?.addEventListener("click", async () => {
-  await syncToGoogleSheets(false);
-  const iframe = document.getElementById("google-sheet-iframe");
-  if (iframe) {
-    iframe.src = `https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?widget=true&headers=false&t=${Date.now()}`;
-  }
-});
 
 init();

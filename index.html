@@ -8,7 +8,6 @@
 </head>
 <body>
 
-  <!-- PANTALLA 1: ACCESO -->
   <section id="login-screen" class="screen active">
     <div class="auth-wrapper">
       <div class="card auth-card">
@@ -45,7 +44,6 @@
     </div>
   </section>
 
-  <!-- PANTALLA 2: RESTABLECER CONTRASEÑA -->
   <section id="reset-screen" class="screen">
     <div class="auth-wrapper">
       <div class="card auth-card">
@@ -82,7 +80,6 @@
     </div>
   </section>
 
-  <!-- PANTALLA 3: APLICACIÓN PRINCIPAL -->
   <section id="app-screen" class="screen">
     <header class="topbar">
       <div class="topbar-user">
@@ -135,7 +132,6 @@
     </main>
   </section>
 
-  <!-- PANTALLA 4: PANEL DE ADMINISTRADOR -->
   <section id="admin-screen" class="screen">
     <header class="topbar">
       <div class="topbar-user">
@@ -194,6 +190,23 @@
 
           <button type="submit" class="btn btn-primary">Guardar Edificio y Timbres</button>
         </form>
+      </section>
+
+      <!-- EDIFICIOS REGISTRADOS (PARA ELIMINAR DIRECCIONES EQUIVOCADAS) -->
+      <section class="card">
+        <h2>Edificios Registrados</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Calle y Número</th>
+                <th>Timbres</th>
+                <th>Acción</th>
+              </tr>
+            </thead>
+            <tbody id="buildings-tbody"></tbody>
+          </table>
+        </div>
       </section>
 
       <!-- PLANILLA DE GOOGLE SHEETS CON DATOS CARGADOS -->
