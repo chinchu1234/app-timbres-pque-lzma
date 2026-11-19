@@ -344,38 +344,20 @@ document.getElementById("btn-logout").addEventListener("click", () => {
 
 function showApp() {
   showScreen("app-screen");
-  document.getElementById("user-display").textContent = currentUser.nombre;
+  document.getElementById("user-display").textContent = `Hola, ${currentUser.nombre}!`;
   document.getElementById("role-badge").textContent = currentUser.rol.toUpperCase();
 
   const btnAdmin = document.getElementById("btn-open-admin");
-  const btnPractice = document.getElementById("btn-toggle-practice");
 
   if (currentUser.rol === "admin") {
     btnAdmin.classList.remove("hidden");
-    btnPractice.classList.remove("hidden");
   } else {
     btnAdmin.classList.add("hidden");
-    btnPractice.classList.add("hidden");
     isPracticeMode = false;
     document.getElementById("practice-banner").classList.add("hidden");
   }
   updateCalleSuggestions();
 }
-
-document.getElementById("btn-toggle-practice").addEventListener("click", (e) => {
-  if (!currentUser || currentUser.rol !== "admin") return;
-
-  isPracticeMode = !isPracticeMode;
-  e.target.textContent = `Práctica: ${isPracticeMode ? "ON" : "OFF"}`;
-  e.target.classList.toggle("on", isPracticeMode);
-  document.getElementById("practice-banner").classList.toggle("hidden", !isPracticeMode);
-  selectedBuildingId = null;
-  document.getElementById("timbres-container").classList.add("hidden");
-  document.getElementById("input-calle").value = "";
-  document.getElementById("input-numero").value = "";
-  document.getElementById("search-feedback").textContent = "";
-  updateCalleSuggestions();
-});
 
 function normalizeText(str) {
   return str
@@ -714,7 +696,7 @@ window.eliminarEdificio = async function (buildingId) {
   }
 };
 
-// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS ---
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ADMIN PRIMERO, LUEGO USUARIO) ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -723,6 +705,10 @@ function renderUsersAdmin() {
   if (!tbody) return;
 
   const emails = Object.keys(users).sort((a, b) => {
+    const rolA = users[a].rol === "admin" ? 0 : 1;
+    const rolB = users[b].rol === "admin" ? 0 : 1;
+    if (rolA !== rolB) return rolA - rolB;
+
     const nameA = (users[a].nombre || a).toLowerCase();
     const nameB = (users[b].nombre || b).toLowerCase();
     return nameA.localeCompare(nameB);
