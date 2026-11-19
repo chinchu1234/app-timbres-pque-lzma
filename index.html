@@ -8,6 +8,7 @@
 </head>
 <body>
 
+  <!-- PANTALLA 1: ACCESO -->
   <section id="login-screen" class="screen active">
     <div class="auth-wrapper">
       <div class="card auth-card">
@@ -44,6 +45,7 @@
     </div>
   </section>
 
+  <!-- PANTALLA 2: RESTABLECER CONTRASEÑA -->
   <section id="reset-screen" class="screen">
     <div class="auth-wrapper">
       <div class="card auth-card">
@@ -80,10 +82,11 @@
     </div>
   </section>
 
+  <!-- PANTALLA 3: APLICACIÓN PRINCIPAL -->
   <section id="app-screen" class="screen">
     <header class="topbar">
       <div class="topbar-user">
-        <span id="user-display" class="user-name">Hola</span>
+        <span id="user-display" class="user-name">Hola!</span>
         <span id="role-badge" class="badge">USUARIO</span>
       </div>
 
@@ -92,15 +95,10 @@
           <button type="button" id="btn-font-dec" class="btn btn-ghost btn-sm" title="Achicar letra">A-</button>
           <button type="button" id="btn-font-inc" class="btn btn-ghost btn-sm" title="Agrandar letra">A+</button>
         </div>
-        <button type="button" id="btn-toggle-practice" class="btn btn-ghost btn-sm hidden">Práctica: OFF</button>
         <button type="button" id="btn-open-admin" class="btn btn-outline btn-sm hidden">Panel de Administrador</button>
         <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Salir</button>
       </div>
     </header>
-
-    <div id="practice-banner" class="banner-notice hidden">
-      Modo práctica activo: los cambios realizados no modifican los datos reales ni la planilla.
-    </div>
 
     <main class="container">
       <section class="card">
@@ -132,6 +130,7 @@
     </main>
   </section>
 
+  <!-- PANTALLA 4: PANEL DE ADMINISTRADOR -->
   <section id="admin-screen" class="screen">
     <header class="topbar">
       <div class="topbar-user">
@@ -192,7 +191,7 @@
         </form>
       </section>
 
-      <!-- EDIFICIOS REGISTRADOS (PARA ELIMINAR DIRECCIONES EQUIVOCADAS) -->
+      <!-- EDIFICIOS REGISTRADOS -->
       <section class="card">
         <h2>Edificios Registrados</h2>
         <div class="table-wrap">
@@ -213,7 +212,10 @@
       <section class="card">
         <div class="section-head">
           <h2>Planilla de Datos (Google Sheets)</h2>
-          <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
+          <div class="section-actions">
+            <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
+            <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-primary btn-sm">Abrir en Google Sheets</button>
+          </div>
         </div>
         <div class="sheet-embed-wrap">
           <iframe

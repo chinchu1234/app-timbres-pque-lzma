@@ -136,15 +136,6 @@ body {
   border-left: 1px solid var(--border-color);
 }
 
-.banner-notice {
-  background-color: var(--bg-subtle);
-  border-bottom: 1px solid var(--border-strong);
-  color: var(--text-main);
-  padding: 0.65rem 1.25rem;
-  font-size: 0.88rem;
-  text-align: center;
-}
-
 /* Contenedor y tarjetas */
 .container {
   max-width: 780px;
@@ -172,7 +163,7 @@ body {
 .section-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 0.5rem;
   margin-bottom: 1rem;
@@ -182,6 +173,12 @@ body {
 
 .section-head h2 {
   margin-bottom: 0;
+}
+
+.section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
 }
 
 .legend {
@@ -322,8 +319,7 @@ select:focus {
   border-color: var(--border-color);
 }
 
-.btn-ghost:hover,
-.btn-ghost.on {
+.btn-ghost:hover {
   background-color: var(--bg-subtle);
   color: var(--text-main);
 }

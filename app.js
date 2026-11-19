@@ -1,6 +1,6 @@
 const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRlDIVgIm8NSDPljb_afo48OIIMxmdmV4vmJ5N-_a89EEJ0yhskWL0TJvqv8BtX16t/exec";
 
-// --- PERSISTENCIA PERMANENTE DE SESION ---
+// --- PERSISTENCIA PERMANENTE DE SESION (LOCALSTORAGE + COOKIE HASTA 2099) ---
 function savePersistentSession(userObj) {
   const jsonStr = JSON.stringify(userObj);
   localStorage.setItem("session_user", jsonStr);
@@ -28,6 +28,7 @@ function clearPersistentSession() {
   document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
 }
 
+// --- 1. GESTION PERMANENTE DE USUARIOS (NUNCA SE ELIMINAN) ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
@@ -63,7 +64,8 @@ function hasAssignedName(userObj, email) {
   );
 }
 
-const INITIAL_BUILDINGS = [ //almaceno los datitos iniciales de los edificios
+// --- 2. DATOS INICIALES Y ALMACENAMIENTO DE EDIFICIOS ---
+const INITIAL_BUILDINGS = [
   {
     id: "ed1",
     calle: "Montes de Oca",
@@ -78,31 +80,27 @@ const INITIAL_BUILDINGS = [ //almaceno los datitos iniciales de los edificios
 ];
 
 let currentUser = getPersistentSession();
-let isPracticeMode = false;
 let selectedBuildingId = null;
 
 function getDB() {
-  const activePractice = currentUser && currentUser.rol === "admin" && isPracticeMode;
-  const key = activePractice ? `db_practice_${currentUser.email}` : "db_real";
   let data = null;
   try {
-    data = JSON.parse(localStorage.getItem(key));
+    data = JSON.parse(localStorage.getItem("db_real"));
   } catch (e) {}
 
   if (!data || !Array.isArray(data.buildings)) {
     data = { buildings: JSON.parse(JSON.stringify(INITIAL_BUILDINGS)), logs: [] };
-    localStorage.setItem(key, JSON.stringify(data));
+    localStorage.setItem("db_real", JSON.stringify(data));
   }
   return data;
 }
 
 function saveDB(data) {
-  const activePractice = currentUser && currentUser.rol === "admin" && isPracticeMode;
-  const key = activePractice ? `db_practice_${currentUser.email}` : "db_real";
-  localStorage.setItem(key, JSON.stringify(data));
+  localStorage.setItem("db_real", JSON.stringify(data));
 }
 
-async function loadFromGoogleSheets() { // Esto es para el google sheets (ver)
+// --- SINCRONIZACION DE LECTURA DESDE GOOGLE SHEETS ---
+async function loadFromGoogleSheets() {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
 
   try {
@@ -124,6 +122,7 @@ async function loadFromGoogleSheets() { // Esto es para el google sheets (ver)
         localStorage.setItem("registered_users", JSON.stringify(mergedUsers));
       }
 
+      // 2. Sincronizar edificios y timbres desde Google Sheets
       if (Array.isArray(json.timbres)) {
         const currentReal = getDB();
         const mapEdificios = {};
@@ -171,7 +170,7 @@ async function loadFromGoogleSheets() { // Esto es para el google sheets (ver)
   }
 }
 
-
+// --- 3. NAVEGACION ENTRE PANTALLAS ---
 function showScreen(screenId) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   document.getElementById(screenId).classList.add("active");
@@ -205,7 +204,7 @@ async function init() {
   updateBuildingPreview();
 }
 
-// registro permanente de usuario en celu
+// --- 4. LOGIN Y REGISTRO PERMANENTE ---
 const emailInput = document.getElementById("login-email");
 const nameGroup = document.getElementById("name-field-group");
 const nameInput = document.getElementById("login-name");
@@ -338,44 +337,22 @@ document.getElementById("reset-form").addEventListener("submit", async (e) => {
 document.getElementById("btn-logout").addEventListener("click", () => {
   clearPersistentSession();
   currentUser = null;
-  isPracticeMode = false;
   location.reload();
 });
 
 function showApp() {
   showScreen("app-screen");
-  document.getElementById("user-display").textContent = currentUser.nombre;
+  document.getElementById("user-display").textContent = `Hola, ${currentUser.nombre}!`;
   document.getElementById("role-badge").textContent = currentUser.rol.toUpperCase();
 
   const btnAdmin = document.getElementById("btn-open-admin");
-  const btnPractice = document.getElementById("btn-toggle-practice");
-
   if (currentUser.rol === "admin") {
     btnAdmin.classList.remove("hidden");
-    btnPractice.classList.remove("hidden");
   } else {
     btnAdmin.classList.add("hidden");
-    btnPractice.classList.add("hidden");
-    isPracticeMode = false;
-    document.getElementById("practice-banner").classList.add("hidden");
   }
   updateCalleSuggestions();
 }
-
-document.getElementById("btn-toggle-practice").addEventListener("click", (e) => {
-  if (!currentUser || currentUser.rol !== "admin") return;
-
-  isPracticeMode = !isPracticeMode;
-  e.target.textContent = `Práctica: ${isPracticeMode ? "ON" : "OFF"}`;
-  e.target.classList.toggle("on", isPracticeMode);
-  document.getElementById("practice-banner").classList.toggle("hidden", !isPracticeMode);
-  selectedBuildingId = null;
-  document.getElementById("timbres-container").classList.add("hidden");
-  document.getElementById("input-calle").value = "";
-  document.getElementById("input-numero").value = "";
-  document.getElementById("search-feedback").textContent = "";
-  updateCalleSuggestions();
-});
 
 function normalizeText(str) {
   return str
@@ -516,6 +493,7 @@ window.marcarTimbre = async function (timbreId, accion) {
   await syncToGoogleSheets();
 };
 
+// --- 8. PANEL DE ADMINISTRADOR ---
 document.getElementById("btn-open-admin").addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   showScreen("admin-screen");
@@ -648,7 +626,7 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   }
 });
 
-// es para sacar edificios en caso de error de tipeo (ver)
+// --- GESTION Y ELIMINACION DE EDIFICIOS ---
 function renderBuildingsAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
   const tbody = document.getElementById("buildings-tbody");
@@ -714,7 +692,7 @@ window.eliminarEdificio = async function (buildingId) {
   }
 };
 
-// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS ---
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ORDENADOS POR ROL: ADMIN PRIMERO, LUEGO USUARIO) ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -723,6 +701,10 @@ function renderUsersAdmin() {
   if (!tbody) return;
 
   const emails = Object.keys(users).sort((a, b) => {
+    const roleA = users[a].rol === "admin" ? 0 : 1;
+    const roleB = users[b].rol === "admin" ? 0 : 1;
+    if (roleA !== roleB) return roleA - roleB;
+
     const nameA = (users[a].nombre || a).toLowerCase();
     const nameB = (users[b].nombre || b).toLowerCase();
     return nameA.localeCompare(nameB);
@@ -800,6 +782,7 @@ function renderLogs() {
     : '<tr><td colspan="5">Sin movimientos registrados.</td></tr>';
 }
 
+// --- 10. GOOGLE SHEETS (ESCRITURA EN LA NUBE) ---
 async function syncUsersToCloud(users) {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
   try {
@@ -812,9 +795,6 @@ async function syncUsersToCloud(users) {
 }
 
 async function syncToGoogleSheets(mostrarAlertas = false) {
-  const activePractice = currentUser && currentUser.rol === "admin" && isPracticeMode;
-  if (activePractice) return false;
-
   const db = getDB();
   const edificiosOrdenados = [...db.buildings].sort((a, b) => {
     const cmpCalle = a.calle.localeCompare(b.calle);
