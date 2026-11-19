@@ -1,12 +1,11 @@
 // ⚠️ REEMPLAZÁ ESTA URL CON LA DE TU APLICACIÓN WEB DE GOOGLE APPS SCRIPT (termina en /exec)
 const GOOGLE_SCRIPT_URL = "https://script.google.com/u/0/home/projects/16HLTh-lkBd4cig0DqhAsNPg7m0BBmQwDnxO2e9RMo0jxsiOQ3vSQJQJg/edit";
 
-// --- PERSISTENCIA REFORZADA DE SESIÓN (LOCALSTORAGE + COOKIE 365 DÍAS) ---
+// --- PERSISTENCIA PERMANENTE DE SESIÓN (LOCALSTORAGE + COOKIE HASTA 2099) ---
 function savePersistentSession(userObj) {
   const jsonStr = JSON.stringify(userObj);
   localStorage.setItem("session_user", jsonStr);
-  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
-  document.cookie = `timbres_session=${encodeURIComponent(jsonStr)}; expires=${expires}; path=/; SameSite=Lax`;
+  document.cookie = `timbres_session=${encodeURIComponent(jsonStr)}; expires=Fri, 31 Dec 2099 23:59:59 GMT; path=/; SameSite=Lax`;
 }
 
 function getPersistentSession() {
@@ -30,30 +29,44 @@ function clearPersistentSession() {
   document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
 }
 
-// --- 1. GESTIÓN DE USUARIOS ---
+// --- 1. GESTIÓN PERMANENTE DE USUARIOS (NUNCA SE ELIMINAN) ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
 
 function getUsersDB() {
-  let users = JSON.parse(localStorage.getItem("registered_users"));
-  if (!users) {
-    users = DEFAULT_USERS;
-    localStorage.setItem("registered_users", JSON.stringify(users));
+  let users = null;
+  try {
+    users = JSON.parse(localStorage.getItem("registered_users"));
+  } catch (e) {}
+
+  if (!users || typeof users !== "object") {
+    users = { ...DEFAULT_USERS };
   }
+  // Garantiza que el admin principal siempre exista
+  if (!users["admin@app.com"]) {
+    users["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
+  }
+  localStorage.setItem("registered_users", JSON.stringify(users));
   return users;
 }
 
 function saveUsersDB(users) {
-  localStorage.setItem("registered_users", JSON.stringify(users));
-  syncUsersToCloud(users);
+  const merged = { ...getUsersDB(), ...users };
+  localStorage.setItem("registered_users", JSON.stringify(merged));
+  syncUsersToCloud(merged);
 }
 
 function hasAssignedName(userObj, email) {
-  return Boolean(userObj && userObj.nombre && userObj.nombre.trim() !== "" && userObj.nombre.trim().toLowerCase() !== email.toLowerCase());
+  return Boolean(
+    userObj &&
+    userObj.nombre &&
+    userObj.nombre.trim() !== "" &&
+    userObj.nombre.trim().toLowerCase() !== email.toLowerCase()
+  );
 }
 
-// --- 2. DATOS INICIALES ---
+// --- 2. DATOS INICIALES Y ALMACENAMIENTO PERMANENTE DE EDIFICIOS ---
 const INITIAL_BUILDINGS = [
   {
     id: "ed1",
@@ -75,8 +88,12 @@ let selectedBuildingId = null;
 function getDB() {
   const activePractice = currentUser && currentUser.rol === "admin" && isPracticeMode;
   const key = activePractice ? `db_practice_${currentUser.email}` : "db_real";
-  let data = JSON.parse(localStorage.getItem(key));
-  if (!data) {
+  let data = null;
+  try {
+    data = JSON.parse(localStorage.getItem(key));
+  } catch (e) {}
+
+  if (!data || !Array.isArray(data.buildings)) {
     data = { buildings: JSON.parse(JSON.stringify(INITIAL_BUILDINGS)), logs: [] };
     localStorage.setItem(key, JSON.stringify(data));
   }
@@ -89,7 +106,7 @@ function saveDB(data) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
-// --- SINCRONIZACIÓN DE LECTURA DESDE GOOGLE SHEETS ---
+// --- SINCRONIZACIÓN DE LECTURA DESDE GOOGLE SHEETS (FUSIÓN SIN BORRAR NADA) ---
 async function loadFromGoogleSheets() {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
 
@@ -98,19 +115,40 @@ async function loadFromGoogleSheets() {
     const json = await res.json();
 
     if (json.status === "ok") {
+      // 1. Fusionar usuarios: nunca elimina usuarios locales ni de la nube
       if (json.users && Object.keys(json.users).length > 0) {
-        localStorage.setItem("registered_users", JSON.stringify(json.users));
+        const localUsers = getUsersDB();
+        const mergedUsers = { ...localUsers };
+        Object.keys(json.users).forEach((email) => {
+          const cleanEmail = email.trim().toLowerCase();
+          mergedUsers[cleanEmail] = {
+            ...(localUsers[cleanEmail] || {}),
+            ...json.users[email]
+          };
+        });
+        localStorage.setItem("registered_users", JSON.stringify(mergedUsers));
       }
 
+      // 2. Fusionar edificios y timbres: preserva todo lo registrado para siempre
       if (json.timbres && json.timbres.length > 0) {
+        const currentReal = getDB();
         const mapEdificios = {};
+
+        // Primero cargamos los edificios que ya están guardados localmente
+        currentReal.buildings.forEach((b) => {
+          const key = `${b.calle.trim().toLowerCase()}_${b.numero.trim().toLowerCase()}`;
+          mapEdificios[key] = b;
+        });
+
+        // Luego incorporamos/actualizamos con lo que viene de Google Sheets
+        const cloudEdificios = {};
         json.timbres.forEach((row, index) => {
           const key = `${row.calle.trim().toLowerCase()}_${row.numero.trim().toLowerCase()}`;
-          if (!mapEdificios[key]) {
-            mapEdificios[key] = {
-              id: `ed_cloud_${Object.keys(mapEdificios).length + 1}`,
-              territorio: row.territorio || "XX",
-              manzana: row.manzana || "XX",
+          if (!cloudEdificios[key]) {
+            cloudEdificios[key] = {
+              id: mapEdificios[key]?.id || `ed_cloud_${Object.keys(cloudEdificios).length + 1}`,
+              territorio: row.territorio || mapEdificios[key]?.territorio || "XX",
+              manzana: row.manzana || mapEdificios[key]?.manzana || "XX",
               calle: row.calle.trim(),
               numero: row.numero.trim(),
               timbres: []
@@ -123,22 +161,23 @@ async function loadFromGoogleSheets() {
             timestamp = isNaN(parsed) ? Date.now() - (json.timbres.length - index) * 1000 : parsed;
           }
 
-          mapEdificios[key].timbres.push({
+          cloudEdificios[key].timbres.push({
             id: `t_cloud_${index}`,
             depto: row.timbre,
-            estado: row.estado === "no_tocar" ? "no_tocar" : (row.estado === "visitado" ? "visitado" : "disponible"),
+            estado: row.estado.toLowerCase() === "no_tocar" ? "no_tocar" : (row.estado.toLowerCase() === "visitado" ? "visitado" : "disponible"),
             ultimaVisita: timestamp,
             ultimaVisitaTexto: row.ultimaVisita
           });
         });
 
-        const currentReal = JSON.parse(localStorage.getItem("db_real")) || { buildings: [], logs: [] };
-        currentReal.buildings = Object.values(mapEdificios);
+        // Combinamos: si un edificio existe localmente y aún no subió a la nube, NO se borra
+        const finalMap = { ...mapEdificios, ...cloudEdificios };
+        currentReal.buildings = Object.values(finalMap);
         localStorage.setItem("db_real", JSON.stringify(currentReal));
       }
     }
   } catch (err) {
-    console.warn("No se pudo descargar desde la nube, usando caché local:", err);
+    console.warn("Sincronización en segundo plano usando respaldo local:", err);
   }
 }
 
@@ -149,15 +188,23 @@ function showScreen(screenId) {
 }
 
 async function init() {
-  // 1. Si ya hay sesión guardada en el celular, entra AL INSTANTE sin esperar red
-  if (currentUser && hasAssignedName(currentUser, currentUser.email)) {
+  // Asegura que el usuario actual siga registrado en la base permanente
+  if (currentUser && currentUser.email) {
+    const users = getUsersDB();
+    if (!users[currentUser.email]) {
+      users[currentUser.email] = {
+        pass: currentUser.pass || "1234",
+        nombre: currentUser.nombre || currentUser.email,
+        rol: currentUser.rol || "usuario"
+      };
+      saveUsersDB(users);
+    }
     showApp();
   }
 
-  // 2. Descarga actualizaciones de la nube en segundo plano
+  // Sincroniza en segundo plano con Google Sheets
   await loadFromGoogleSheets();
 
-  // 3. Revalida rol/nombre actualizado desde la nube
   if (currentUser) {
     const users = getUsersDB();
     if (users[currentUser.email]) {
@@ -170,7 +217,7 @@ async function init() {
   updateBuildingPreview();
 }
 
-// --- 4. LOGIN Y REGISTRO INTELIGENTE ---
+// --- 4. LOGIN Y REGISTRO PERMANENTE ---
 const emailInput = document.getElementById("login-email");
 const nameGroup = document.getElementById("name-field-group");
 const nameInput = document.getElementById("login-name");
@@ -250,7 +297,7 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       nameGroup.classList.remove("hidden");
       nameInput.required = true;
       nameInput.focus();
-      errorEl.textContent = "Es un correo nuevo. Completá tu Nombre y Apellido.";
+      errorEl.textContent = "Es tu primera vez. Completá tu Nombre y Apellido para quedar registrado.";
       return;
     }
 
@@ -467,10 +514,13 @@ window.marcarTimbre = async function (timbreId, accion) {
   await syncToGoogleSheets();
 };
 
+// --- 8. PANEL DE ADMINISTRACIÓN ---
 document.getElementById("btn-open-admin").addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   showScreen("admin-screen");
   updateBuildingPreview();
+  renderUsersAdmin();
+  renderLogs();
   await loadFromGoogleSheets();
   renderUsersAdmin();
   renderLogs();
@@ -482,7 +532,7 @@ document.getElementById("btn-back-app").addEventListener("click", () => {
 
 document.getElementById("btn-reset-dates")?.addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
-  if (!confirm("⚠️ ¿Reiniciar todas las fechas de todos los edificios a 'Nunca tocado'?")) return;
+  if (!confirm("⚠️ ¿Reiniciar todas las fechas de todos los edificios a 'Nunca tocado'? (Los edificios y timbres seguirán guardados).")) return;
 
   const db = getDB();
   db.buildings.forEach((b) => {
@@ -505,7 +555,7 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
   saveDB(db);
   renderLogs();
   const ok = await syncToGoogleSheets(true);
-  
+
   if (ok) {
     alert("✅ Historial reiniciado y actualizado en Google Sheets.");
   }
@@ -542,6 +592,7 @@ function updateBuildingPreview() {
   if (el) el.addEventListener("input", updateBuildingPreview);
 });
 
+// ALTA PERMANENTE DE EDIFICIOS Y TIMBRES (NUNCA SE ELIMINAN)
 document.getElementById("add-building-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.rol !== "admin") return;
@@ -550,7 +601,12 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   const numero = document.getElementById("new-numero").value.trim();
   const etiquetas = generateDeptoLabels();
 
-  const timbres = etiquetas.map((depto, idx) => ({
+  const db = getDB();
+  const existingIdx = db.buildings.findIndex(
+    (b) => normalizeText(b.calle) === normalizeText(calle) && normalizeText(b.numero) === normalizeText(numero)
+  );
+
+  const nuevosTimbres = etiquetas.map((depto, idx) => ({
     id: `t_${Date.now()}_${idx}`,
     depto,
     estado: "disponible",
@@ -558,8 +614,23 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
     ultimaVisitaTexto: "Nunca tocado"
   }));
 
-  const db = getDB();
-  db.buildings.push({ id: `ed_${Date.now()}`, calle, numero, timbres });
+  if (existingIdx !== -1) {
+    // Si el edificio ya existía, agrega solo los timbres que no existan sin borrar los anteriores
+    const existentesDeptos = new Set(db.buildings[existingIdx].timbres.map((t) => normalizeText(t.depto)));
+    nuevosTimbres.forEach((nt) => {
+      if (!existentesDeptos.has(normalizeText(nt.depto))) {
+        db.buildings[existingIdx].timbres.push(nt);
+      }
+    });
+  } else {
+    db.buildings.push({
+      id: `ed_${Date.now()}`,
+      calle,
+      numero,
+      timbres: nuevosTimbres
+    });
+  }
+
   saveDB(db);
   updateCalleSuggestions();
 
@@ -568,52 +639,78 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
 
   const ok = await syncToGoogleSheets(true);
   if (ok) {
-    alert(`✅ Edificio creado con ${timbres.length} timbres y guardado en Google Sheets.`);
+    alert(`✅ Edificio ${calle} ${numero} registrado permanentemente con ${nuevosTimbres.length} timbres.`);
   }
 });
 
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ADMIN) ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
   const users = getUsersDB();
   const tbody = document.getElementById("users-tbody");
-  const emails = Object.keys(users).sort();
+  if (!tbody) return;
+
+  const emails = Object.keys(users).sort((a, b) => {
+    const nameA = (users[a].nombre || a).toLowerCase();
+    const nameB = (users[b].nombre || b).toLowerCase();
+    return nameA.localeCompare(nameB);
+  });
 
   tbody.innerHTML = emails.map((email) => {
     const u = users[email];
     const isAdmin = u.rol === "admin";
-    const isSelf = currentUser.email === email;
-    const isRootAdmin = email === "admin@app.com";
+    const isSelf = currentUser.email.toLowerCase() === email.toLowerCase();
+    const isRootAdmin = email.toLowerCase() === "admin@app.com";
+    const nombreUsuario = u.nombre && u.nombre.trim() !== "" ? u.nombre : "Sin nombre registrado";
 
-    let accionHTML = isSelf ? `<small>Tu cuenta</small>` : isRootAdmin ? `<small>Protegido</small>` : `
-      <button type="button" class="btn-table ${isAdmin ? "btn-no-tocar" : "btn-visitado"}" onclick="toggleUserRole('${email}')">
-        ${isAdmin ? "Quitar Admin" : "Hacer Admin"}
-      </button>`;
+    let accionHTML = "";
+    if (isRootAdmin) {
+      accionHTML = `<small>Admin Principal</small>`;
+    } else if (isSelf) {
+      accionHTML = `<small>Tu cuenta actual</small>`;
+    } else {
+      accionHTML = `
+        <button
+          type="button"
+          class="btn-table ${isAdmin ? "btn-no-tocar" : "btn-visitado"}"
+          onclick="toggleUserRole('${email}')"
+        >
+          ${isAdmin ? "Quitar Admin" : "Hacer Admin"}
+        </button>
+      `;
+    }
 
     return `
       <tr>
-        <td><strong>${u.nombre || "Sin nombre"}</strong></td>
+        <td><strong>${nombreUsuario}</strong></td>
         <td>${email}</td>
-        <td><span class="badge">${u.rol.toUpperCase()}</span></td>
+        <td><span class="badge">${isAdmin ? "ADMIN" : "USUARIO"}</span></td>
         <td>${accionHTML}</td>
       </tr>
     `;
   }).join("");
 }
 
-window.toggleUserRole = function (email) {
+window.toggleUserRole = async function (email) {
   if (!currentUser || currentUser.rol !== "admin") return;
   const users = getUsersDB();
-  users[email].rol = users[email].rol === "admin" ? "usuario" : "admin";
+  if (!users[email]) return;
+
+  const nuevoRol = users[email].rol === "admin" ? "usuario" : "admin";
+  users[email].rol = nuevoRol;
   saveUsersDB(users);
   renderUsersAdmin();
-  alert(`✅ Permisos actualizados para ${email}.`);
+
+  const accionTexto = nuevoRol === "admin" ? "otorgados permisos de Administrador a" : "quitados los permisos de Administrador a";
+  alert(`✅ Permisos actualizados: ${accionTexto} ${users[email].nombre || email}.`);
 };
 
 function renderLogs() {
   const db = getDB();
   const users = getUsersDB();
   const tbody = document.getElementById("logs-tbody");
+  if (!tbody) return;
 
   tbody.innerHTML = db.logs.length
     ? db.logs.map((l) => {
@@ -675,7 +772,7 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
 
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) {
     if (mostrarAlertas) {
-      alert("⚠️ Edificio guardado localmente, pero falta configurar GOOGLE_SCRIPT_URL en app.js.");
+      alert("⚠️ Guardado localmente, pero falta configurar GOOGLE_SCRIPT_URL en app.js.");
     }
     return false;
   }
