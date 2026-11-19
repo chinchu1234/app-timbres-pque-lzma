@@ -1,4 +1,36 @@
-// --- 1. GESTIÓN DE USUARIOS PERSISTENTES ---
+// ⚠️ REEMPLAZÁ ESTA URL CON LA DE TU APLICACIÓN WEB DE GOOGLE APPS SCRIPT (termina en /exec)
+const GOOGLE_SCRIPT_URL = "https://script.google.com/u/0/home/projects/16HLTh-lkBd4cig0DqhAsNPg7m0BBmQwDnxO2e9RMo0jxsiOQ3vSQJQJg/edit";
+
+// --- PERSISTENCIA REFORZADA DE SESIÓN (LOCALSTORAGE + COOKIE 365 DÍAS) ---
+function savePersistentSession(userObj) {
+  const jsonStr = JSON.stringify(userObj);
+  localStorage.setItem("session_user", jsonStr);
+  const expires = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toUTCString();
+  document.cookie = `timbres_session=${encodeURIComponent(jsonStr)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getPersistentSession() {
+  const fromLocal = localStorage.getItem("session_user");
+  if (fromLocal) {
+    try { return JSON.parse(fromLocal); } catch (e) {}
+  }
+  const match = document.cookie.match(/(?:^|;\s*)timbres_session=([^;]*)/);
+  if (match && match[1]) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(match[1]));
+      localStorage.setItem("session_user", JSON.stringify(parsed));
+      return parsed;
+    } catch (e) {}
+  }
+  return null;
+}
+
+function clearPersistentSession() {
+  localStorage.removeItem("session_user");
+  document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
+}
+
+// --- 1. GESTIÓN DE USUARIOS ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
@@ -14,13 +46,14 @@ function getUsersDB() {
 
 function saveUsersDB(users) {
   localStorage.setItem("registered_users", JSON.stringify(users));
+  syncUsersToCloud(users);
 }
 
 function hasAssignedName(userObj, email) {
   return Boolean(userObj && userObj.nombre && userObj.nombre.trim() !== "" && userObj.nombre.trim().toLowerCase() !== email.toLowerCase());
 }
 
-// --- 2. DATOS INICIALES DE EDIFICIOS ---
+// --- 2. DATOS INICIALES ---
 const INITIAL_BUILDINGS = [
   {
     id: "ed1",
@@ -32,19 +65,10 @@ const INITIAL_BUILDINGS = [
       { id: "t3", depto: "2° A", estado: "no_tocar", ultimaVisita: 1705000000000 },
       { id: "t4", depto: "4° A", estado: "disponible", ultimaVisita: 0 }
     ]
-  },
-  {
-    id: "ed2",
-    calle: "Montes de Oca",
-    numero: "120",
-    timbres: [
-      { id: "t5", depto: "PB A", estado: "disponible", ultimaVisita: 0 },
-      { id: "t6", depto: "1° A", estado: "disponible", ultimaVisita: 1720000000000 }
-    ]
   }
 ];
 
-let currentUser = JSON.parse(localStorage.getItem("session_user")) || null;
+let currentUser = getPersistentSession();
 let isPracticeMode = false;
 let selectedBuildingId = null;
 
@@ -65,24 +89,81 @@ function saveDB(data) {
   localStorage.setItem(key, JSON.stringify(data));
 }
 
+// --- SINCRONIZACIÓN DE LECTURA DESDE GOOGLE SHEETS ---
+async function loadFromGoogleSheets() {
+  if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
+
+  try {
+    const res = await fetch(`${GOOGLE_SCRIPT_URL}?action=load`);
+    const json = await res.json();
+
+    if (json.status === "ok") {
+      if (json.users && Object.keys(json.users).length > 0) {
+        localStorage.setItem("registered_users", JSON.stringify(json.users));
+      }
+
+      if (json.timbres && json.timbres.length > 0) {
+        const mapEdificios = {};
+        json.timbres.forEach((row, index) => {
+          const key = `${row.calle.trim().toLowerCase()}_${row.numero.trim().toLowerCase()}`;
+          if (!mapEdificios[key]) {
+            mapEdificios[key] = {
+              id: `ed_cloud_${Object.keys(mapEdificios).length + 1}`,
+              territorio: row.territorio || "XX",
+              manzana: row.manzana || "XX",
+              calle: row.calle.trim(),
+              numero: row.numero.trim(),
+              timbres: []
+            };
+          }
+
+          let timestamp = 0;
+          if (row.ultimaVisita && row.ultimaVisita !== "Nunca tocado") {
+            const parsed = Date.parse(row.ultimaVisita);
+            timestamp = isNaN(parsed) ? Date.now() - (json.timbres.length - index) * 1000 : parsed;
+          }
+
+          mapEdificios[key].timbres.push({
+            id: `t_cloud_${index}`,
+            depto: row.timbre,
+            estado: row.estado === "no_tocar" ? "no_tocar" : (row.estado === "visitado" ? "visitado" : "disponible"),
+            ultimaVisita: timestamp,
+            ultimaVisitaTexto: row.ultimaVisita
+          });
+        });
+
+        const currentReal = JSON.parse(localStorage.getItem("db_real")) || { buildings: [], logs: [] };
+        currentReal.buildings = Object.values(mapEdificios);
+        localStorage.setItem("db_real", JSON.stringify(currentReal));
+      }
+    }
+  } catch (err) {
+    console.warn("No se pudo descargar desde la nube, usando caché local:", err);
+  }
+}
+
 // --- 3. NAVEGACIÓN ENTRE PANTALLAS ---
 function showScreen(screenId) {
   document.querySelectorAll(".screen").forEach((s) => s.classList.remove("active"));
   document.getElementById(screenId).classList.add("active");
 }
 
-function init() {
+async function init() {
+  // 1. Si ya hay sesión guardada en el celular, entra AL INSTANTE sin esperar red
+  if (currentUser && hasAssignedName(currentUser, currentUser.email)) {
+    showApp();
+  }
+
+  // 2. Descarga actualizaciones de la nube en segundo plano
+  await loadFromGoogleSheets();
+
+  // 3. Revalida rol/nombre actualizado desde la nube
   if (currentUser) {
     const users = getUsersDB();
     if (users[currentUser.email]) {
       currentUser.rol = users[currentUser.email].rol;
       currentUser.nombre = users[currentUser.email].nombre;
-      localStorage.setItem("session_user", JSON.stringify(currentUser));
-    }
-    if (!hasAssignedName(currentUser, currentUser.email)) {
-      localStorage.removeItem("session_user");
-      currentUser = null;
-    } else {
+      savePersistentSession(currentUser);
       showApp();
     }
   }
@@ -124,19 +205,26 @@ if (emailInput) {
   emailInput.addEventListener("blur", checkEmailNeedsName);
 }
 
-document.getElementById("login-form").addEventListener("submit", (e) => {
+document.getElementById("login-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = emailInput.value.trim().toLowerCase();
   const pass = document.getElementById("login-pass").value;
   const nombreIngresado = nameInput.value.trim();
   const errorEl = document.getElementById("login-error");
 
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Conectando...";
+
+  await loadFromGoogleSheets();
   const users = getUsersDB();
   const existingUser = users[email];
+
+  submitBtn.disabled = false;
 
   if (existingUser) {
     if (existingUser.pass !== pass) {
       errorEl.textContent = "Contraseña incorrecta para este correo.";
+      submitBtn.textContent = "Ingresar";
       alert("⚠️ Contraseña incorrecta. Verificá tu clave.");
       return;
     }
@@ -154,7 +242,7 @@ document.getElementById("login-form").addEventListener("submit", (e) => {
     }
 
     currentUser = { email, ...existingUser };
-    localStorage.setItem("session_user", JSON.stringify(currentUser));
+    savePersistentSession(currentUser);
     errorEl.textContent = "";
     showApp();
   } else {
@@ -171,7 +259,7 @@ document.getElementById("login-form").addEventListener("submit", (e) => {
     saveUsersDB(users);
 
     currentUser = { email, ...newUser };
-    localStorage.setItem("session_user", JSON.stringify(currentUser));
+    savePersistentSession(currentUser);
     errorEl.textContent = "";
     showApp();
   }
@@ -187,13 +275,14 @@ document.getElementById("btn-cancel-reset").addEventListener("click", () => {
   showScreen("login-screen");
 });
 
-document.getElementById("reset-form").addEventListener("submit", (e) => {
+document.getElementById("reset-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const email = document.getElementById("reset-email").value.trim().toLowerCase();
   const newPass = document.getElementById("reset-new-pass").value;
   const confirmPass = document.getElementById("reset-confirm-pass").value;
   const msgEl = document.getElementById("reset-msg");
 
+  await loadFromGoogleSheets();
   const users = getUsersDB();
   if (!users[email]) {
     msgEl.textContent = "Ese correo electrónico no está registrado.";
@@ -213,7 +302,7 @@ document.getElementById("reset-form").addEventListener("submit", (e) => {
 });
 
 document.getElementById("btn-logout").addEventListener("click", () => {
-  localStorage.removeItem("session_user");
+  clearPersistentSession();
   currentUser = null;
   isPracticeMode = false;
   location.reload();
@@ -269,7 +358,7 @@ function updateCalleSuggestions() {
   datalist.innerHTML = callesUnicas.map((c) => `<option value="${c}">`).join("");
 }
 
-function ejecutarBusqueda() {
+async function ejecutarBusqueda() {
   const calleBuscada = normalizeText(document.getElementById("input-calle").value);
   const numeroBuscado = normalizeText(document.getElementById("input-numero").value);
   const feedback = document.getElementById("search-feedback");
@@ -279,6 +368,10 @@ function ejecutarBusqueda() {
     document.getElementById("timbres-container").classList.add("hidden");
     return;
   }
+
+  feedback.textContent = "Buscando...";
+  await loadFromGoogleSheets();
+  updateCalleSuggestions();
 
   const db = getDB();
   const match = db.buildings.find(
@@ -320,7 +413,9 @@ function renderTimbres() {
   sorted.forEach((t) => {
     const fechaTexto = t.ultimaVisita === 0
       ? "Nunca tocado"
-      : `Última vez: ${new Date(t.ultimaVisita).toLocaleDateString()} ${new Date(t.ultimaVisita).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+      : (t.ultimaVisitaTexto && t.ultimaVisitaTexto !== "Nunca tocado"
+          ? `Última vez: ${t.ultimaVisitaTexto}`
+          : `Última vez: ${new Date(t.ultimaVisita).toLocaleDateString()} ${new Date(t.ultimaVisita).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`);
 
     const isNoTocar = t.estado === "no_tocar";
 
@@ -343,13 +438,14 @@ function renderTimbres() {
   });
 }
 
-window.marcarTimbre = function (timbreId, accion) {
+window.marcarTimbre = async function (timbreId, accion) {
   const db = getDB();
   const building = db.buildings.find((b) => b.id === selectedBuildingId);
   const timbre = building.timbres.find((t) => t.id === timbreId);
 
   if (accion === "visitado") {
     timbre.ultimaVisita = Date.now();
+    timbre.ultimaVisitaTexto = new Date(timbre.ultimaVisita).toLocaleString();
     timbre.estado = "visitado";
   } else if (accion === "no_tocar") {
     timbre.estado = "no_tocar";
@@ -368,13 +464,14 @@ window.marcarTimbre = function (timbreId, accion) {
 
   saveDB(db);
   renderTimbres();
-  syncToGoogleSheets();
+  await syncToGoogleSheets();
 };
 
-document.getElementById("btn-open-admin").addEventListener("click", () => {
+document.getElementById("btn-open-admin").addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   showScreen("admin-screen");
   updateBuildingPreview();
+  await loadFromGoogleSheets();
   renderUsersAdmin();
   renderLogs();
 });
@@ -383,7 +480,7 @@ document.getElementById("btn-back-app").addEventListener("click", () => {
   showApp();
 });
 
-document.getElementById("btn-reset-dates")?.addEventListener("click", () => {
+document.getElementById("btn-reset-dates")?.addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
   if (!confirm("⚠️ ¿Reiniciar todas las fechas de todos los edificios a 'Nunca tocado'?")) return;
 
@@ -391,6 +488,7 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", () => {
   db.buildings.forEach((b) => {
     b.timbres.forEach((t) => {
       t.ultimaVisita = 0;
+      t.ultimaVisitaTexto = "Nunca tocado";
       t.estado = "disponible";
     });
   });
@@ -406,9 +504,11 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", () => {
 
   saveDB(db);
   renderLogs();
-  syncToGoogleSheets();
+  const ok = await syncToGoogleSheets(true);
   
-  alert("✅ Historial de fechas reiniciado correctamente.");
+  if (ok) {
+    alert("✅ Historial reiniciado y actualizado en Google Sheets.");
+  }
 });
 
 function generateDeptoLabels() {
@@ -442,7 +542,7 @@ function updateBuildingPreview() {
   if (el) el.addEventListener("input", updateBuildingPreview);
 });
 
-document.getElementById("add-building-form").addEventListener("submit", (e) => {
+document.getElementById("add-building-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -454,7 +554,8 @@ document.getElementById("add-building-form").addEventListener("submit", (e) => {
     id: `t_${Date.now()}_${idx}`,
     depto,
     estado: "disponible",
-    ultimaVisita: 0
+    ultimaVisita: 0,
+    ultimaVisitaTexto: "Nunca tocado"
   }));
 
   const db = getDB();
@@ -464,8 +565,11 @@ document.getElementById("add-building-form").addEventListener("submit", (e) => {
 
   e.target.reset();
   updateBuildingPreview();
-  syncToGoogleSheets();
-  alert(`✅ Edificio creado con ${timbres.length} timbres y sincronizado con Google Sheets.`);
+
+  const ok = await syncToGoogleSheets(true);
+  if (ok) {
+    alert(`✅ Edificio creado con ${timbres.length} timbres y guardado en Google Sheets.`);
+  }
 });
 
 function renderUsersAdmin() {
@@ -528,13 +632,21 @@ function renderLogs() {
     : '<tr><td colspan="5">Sin movimientos.</td></tr>';
 }
 
-// --- 10. GOOGLE SHEETS (SINCRONIZACIÓN REAL CON TODAS LAS CARACTERÍSTICAS) ---
-// ⚠️ REEMPLAZÁ ESTA URL CON LA DE TU IMPLEMENTACIÓN DE GOOGLE APPS SCRIPT (termina en /exec)
-const GOOGLE_SCRIPT_URL = "https://script.google.com/u/0/home/projects/16HLTh-lkBd4cig0DqhAsNPg7m0BBmQwDnxO2e9RMo0jxsiOQ3vSQJQJg/edit";
+// --- 10. GOOGLE SHEETS (ESCRITURA EN LA NUBE) ---
+async function syncUsersToCloud(users) {
+  if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
+  try {
+    const formBody = new URLSearchParams();
+    formBody.append("payload", JSON.stringify({ users }));
+    await fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", body: formBody });
+  } catch (err) {
+    console.error("Error guardando usuarios en la nube:", err);
+  }
+}
 
-function syncToGoogleSheets() {
+async function syncToGoogleSheets(mostrarAlertas = false) {
   const activePractice = currentUser && currentUser.rol === "admin" && isPracticeMode;
-  if (activePractice) return; // En modo práctica no modifica la nube
+  if (activePractice) return false;
 
   const db = getDB();
   const edificiosOrdenados = [...db.buildings].sort((a, b) => {
@@ -547,7 +659,7 @@ function syncToGoogleSheets() {
     ed.timbres.forEach((t) => {
       const fechaTexto = t.ultimaVisita === 0
         ? "Nunca tocado"
-        : new Date(t.ultimaVisita).toLocaleString();
+        : (t.ultimaVisitaTexto || new Date(t.ultimaVisita).toLocaleString());
 
       rows.push({
         territorio: ed.territorio || "XX",
@@ -561,20 +673,34 @@ function syncToGoogleSheets() {
     });
   });
 
-  localStorage.setItem("virtual_sheets_data", JSON.stringify(rows));
+  if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) {
+    if (mostrarAlertas) {
+      alert("⚠️ Edificio guardado localmente, pero falta configurar GOOGLE_SCRIPT_URL en app.js.");
+    }
+    return false;
+  }
 
-  if (GOOGLE_SCRIPT_URL && GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/")) {
-    fetch(GOOGLE_SCRIPT_URL, {
+  try {
+    const formBody = new URLSearchParams();
+    formBody.append("payload", JSON.stringify({ rows }));
+
+    await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
       mode: "no-cors",
-      headers: { "Content-Type": "text/plain;charset=utf-8" },
-      body: JSON.stringify({ rows })
-    }).catch((err) => console.error("Error sincronizando con Google Sheets:", err));
+      body: formBody
+    });
+    return true;
+  } catch (err) {
+    console.error("Error sincronizando con Google Sheets:", err);
+    if (mostrarAlertas) {
+      alert("❌ Error de red al intentar enviar los datos a Google Sheets.");
+    }
+    return false;
   }
 }
 
-window.abrirGoogleSheetsNube = function () {
-  syncToGoogleSheets();
+window.abrirGoogleSheetsNube = async function () {
+  await syncToGoogleSheets(false);
   window.open("https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/edit?gid=0#gid=0", "_blank");
 };
 
