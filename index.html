@@ -10,6 +10,13 @@
 
   <!-- PANTALLA 1: ACCESO -->
   <section id="login-screen" class="screen active">
+    <div class="auth-topbar">
+      <div class="font-controls" aria-label="Tamaño de letra">
+        <button type="button" class="btn btn-ghost btn-sm btn-font-dec" title="Achicar letra">A-</button>
+        <button type="button" class="btn btn-ghost btn-sm btn-font-inc" title="Agrandar letra">A+</button>
+      </div>
+    </div>
+
     <div class="auth-wrapper">
       <div class="card auth-card">
         <header class="auth-header">
@@ -47,6 +54,13 @@
 
   <!-- PANTALLA 2: RESTABLECER CONTRASEÑA -->
   <section id="reset-screen" class="screen">
+    <div class="auth-topbar">
+      <div class="font-controls" aria-label="Tamaño de letra">
+        <button type="button" class="btn btn-ghost btn-sm btn-font-dec" title="Achicar letra">A-</button>
+        <button type="button" class="btn btn-ghost btn-sm btn-font-inc" title="Agrandar letra">A+</button>
+      </div>
+    </div>
+
     <div class="auth-wrapper">
       <div class="card auth-card">
         <header class="auth-header">
@@ -92,8 +106,8 @@
 
       <div class="topbar-controls">
         <div class="font-controls" aria-label="Tamaño de letra">
-          <button type="button" id="btn-font-dec" class="btn btn-ghost btn-sm" title="Achicar letra">A-</button>
-          <button type="button" id="btn-font-inc" class="btn btn-ghost btn-sm" title="Agrandar letra">A+</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-font-dec" title="Achicar letra">A-</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-font-inc" title="Agrandar letra">A+</button>
         </div>
         <button type="button" id="btn-open-admin" class="btn btn-outline btn-sm hidden">Panel de Administrador</button>
         <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Salir</button>
@@ -137,7 +151,10 @@
         <span class="user-name">Panel de Administrador</span>
       </div>
       <div class="topbar-controls">
-        <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-outline btn-sm">Abrir en Google Sheets</button>
+        <div class="font-controls" aria-label="Tamaño de letra">
+          <button type="button" class="btn btn-ghost btn-sm btn-font-dec" title="Achicar letra">A-</button>
+          <button type="button" class="btn btn-ghost btn-sm btn-font-inc" title="Agrandar letra">A+</button>
+        </div>
         <button type="button" id="btn-back-app" class="btn btn-primary btn-sm">Volver</button>
       </div>
     </header>

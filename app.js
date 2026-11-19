@@ -28,7 +28,7 @@ function clearPersistentSession() {
   document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
 }
 
-// --- 1. GESTION PERMANENTE DE USUARIOS (NUNCA SE ELIMINAN) ---
+// --- 1. GESTION DE USUARIOS ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
@@ -49,10 +49,13 @@ function getUsersDB() {
   return users;
 }
 
-function saveUsersDB(users) {
-  const merged = { ...getUsersDB(), ...users };
-  localStorage.setItem("registered_users", JSON.stringify(merged));
-  syncUsersToCloud(merged);
+function saveUsersDB(users, replaceAll = false) {
+  const finalUsers = replaceAll ? { ...users } : { ...getUsersDB(), ...users };
+  if (!finalUsers["admin@app.com"]) {
+    finalUsers["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
+  }
+  localStorage.setItem("registered_users", JSON.stringify(finalUsers));
+  syncUsersToCloud(finalUsers, replaceAll);
 }
 
 function hasAssignedName(userObj, email) {
@@ -108,18 +111,17 @@ async function loadFromGoogleSheets() {
     const json = await res.json();
 
     if (json.status === "ok") {
-      // 1. Fusionar usuarios registrados
+      // 1. Sincronizar usuarios registrados desde la nube
       if (json.users && Object.keys(json.users).length > 0) {
-        const localUsers = getUsersDB();
-        const mergedUsers = { ...localUsers };
+        const cloudUsers = {};
         Object.keys(json.users).forEach((email) => {
           const cleanEmail = email.trim().toLowerCase();
-          mergedUsers[cleanEmail] = {
-            ...(localUsers[cleanEmail] || {}),
-            ...json.users[email]
-          };
+          cloudUsers[cleanEmail] = json.users[email];
         });
-        localStorage.setItem("registered_users", JSON.stringify(mergedUsers));
+        if (!cloudUsers["admin@app.com"]) {
+          cloudUsers["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
+        }
+        localStorage.setItem("registered_users", JSON.stringify(cloudUsers));
       }
 
       // 2. Sincronizar edificios y timbres desde Google Sheets
@@ -199,12 +201,17 @@ async function init() {
       currentUser.nombre = users[currentUser.email].nombre;
       savePersistentSession(currentUser);
       showApp();
+    } else {
+      // Si el administrador eliminó esta cuenta, cierra sesión
+      clearPersistentSession();
+      currentUser = null;
+      showScreen("login-screen");
     }
   }
   updateBuildingPreview();
 }
 
-// --- 4. LOGIN Y REGISTRO PERMANENTE ---
+// --- 4. LOGIN Y REGISTRO ---
 const emailInput = document.getElementById("login-email");
 const nameGroup = document.getElementById("name-field-group");
 const nameInput = document.getElementById("login-name");
@@ -692,7 +699,7 @@ window.eliminarEdificio = async function (buildingId) {
   }
 };
 
-// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ORDENADOS POR ROL: ADMIN PRIMERO, LUEGO USUARIO) ---
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ORDENADOS POR ROL + ELIMINAR) ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -724,13 +731,22 @@ function renderUsersAdmin() {
       accionHTML = `<span class="legend">Tu cuenta</span>`;
     } else {
       accionHTML = `
-        <button
-          type="button"
-          class="btn-table ${isAdmin ? "btn-no-tocar" : "btn-visitado"}"
-          onclick="toggleUserRole('${email}')"
-        >
-          ${isAdmin ? "Quitar Admin" : "Hacer Admin"}
-        </button>
+        <div class="user-actions-cell">
+          <button
+            type="button"
+            class="btn-table ${isAdmin ? "btn-habilitar" : "btn-visitado"}"
+            onclick="toggleUserRole('${email}')"
+          >
+            ${isAdmin ? "Quitar Admin" : "Hacer Admin"}
+          </button>
+          <button
+            type="button"
+            class="btn-table btn-no-tocar"
+            onclick="eliminarUsuario('${email}')"
+          >
+            Eliminar
+          </button>
+        </div>
       `;
     }
 
@@ -752,11 +768,41 @@ window.toggleUserRole = async function (email) {
 
   const nuevoRol = users[email].rol === "admin" ? "usuario" : "admin";
   users[email].rol = nuevoRol;
-  saveUsersDB(users);
+  saveUsersDB(users, false);
   renderUsersAdmin();
 
   const accionTexto = nuevoRol === "admin" ? "Permisos de administrador asignados a" : "Permisos de administrador retirados a";
   alert(`${accionTexto} ${users[email].nombre || email}.`);
+};
+
+window.eliminarUsuario = async function (email) {
+  if (!currentUser || currentUser.rol !== "admin") return;
+  if (email.toLowerCase() === "admin@app.com" || email.toLowerCase() === currentUser.email.toLowerCase()) return;
+
+  const users = getUsersDB();
+  const target = users[email];
+  if (!target) return;
+
+  const confirmar = confirm(`¿Eliminar del registro al usuario "${target.nombre || email}" (${email})?`);
+  if (!confirmar) return;
+
+  delete users[email];
+  saveUsersDB(users, true);
+
+  const db = getDB();
+  db.logs.unshift({
+    fecha: formatFechaRegistro(Date.now()),
+    usuario: currentUser.nombre,
+    email: currentUser.email,
+    edificio: "USUARIOS",
+    timbre: target.nombre || email,
+    accion: "USUARIO ELIMINADO"
+  });
+  saveDB(db);
+
+  renderUsersAdmin();
+  renderLogs();
+  alert(`Usuario "${target.nombre || email}" eliminado del registro.`);
 };
 
 function renderLogs() {
@@ -783,11 +829,11 @@ function renderLogs() {
 }
 
 // --- 10. GOOGLE SHEETS (ESCRITURA EN LA NUBE) ---
-async function syncUsersToCloud(users) {
+async function syncUsersToCloud(users, replaceAll = false) {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
   try {
     const formBody = new URLSearchParams();
-    formBody.append("payload", JSON.stringify({ users }));
+    formBody.append("payload", JSON.stringify({ users, replaceUsers: replaceAll }));
     await fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", body: formBody });
   } catch (err) {
     console.error("Error guardando usuarios:", err);
@@ -863,7 +909,7 @@ window.abrirGoogleSheetsNube = async function () {
   window.open("https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/edit?gid=0#gid=0", "_blank");
 };
 
-// --- 11. ACCESIBILIDAD (A- / A+) ---
+// --- 11. ACCESIBILIDAD (A- / A+ EN TODAS LAS INTERFACES) ---
 const MIN_FONT = 14;
 const MAX_FONT = 22;
 let currentFontSize = parseInt(localStorage.getItem("custom_font_size"), 10) || 16;
@@ -876,7 +922,12 @@ function applyFontSize(size) {
 
 applyFontSize(currentFontSize);
 
-document.getElementById("btn-font-dec")?.addEventListener("click", () => applyFontSize(currentFontSize - 1.5));
-document.getElementById("btn-font-inc")?.addEventListener("click", () => applyFontSize(currentFontSize + 1.5));
+document.querySelectorAll(".btn-font-dec").forEach((btn) => {
+  btn.addEventListener("click", () => applyFontSize(currentFontSize - 1.5));
+});
+
+document.querySelectorAll(".btn-font-inc").forEach((btn) => {
+  btn.addEventListener("click", () => applyFontSize(currentFontSize + 1.5));
+});
 
 init();

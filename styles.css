@@ -50,8 +50,14 @@ body {
 }
 
 /* Autenticación */
+.auth-topbar {
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.85rem 1.25rem 0;
+}
+
 .auth-wrapper {
-  min-height: 100vh;
+  min-height: calc(100vh - 3.2rem);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -122,6 +128,7 @@ body {
 
 .font-controls {
   display: inline-flex;
+  background-color: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: 4px;
   overflow: hidden;
@@ -179,6 +186,12 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.user-actions-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
 }
 
 .legend {
