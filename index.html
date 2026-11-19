@@ -92,6 +92,7 @@
           <button type="button" id="btn-font-dec" class="btn btn-ghost btn-sm" title="Achicar letra">A-</button>
           <button type="button" id="btn-font-inc" class="btn btn-ghost btn-sm" title="Agrandar letra">A+</button>
         </div>
+        <button type="button" id="btn-toggle-practice" class="btn btn-ghost btn-sm hidden">Práctica: OFF</button>
         <button type="button" id="btn-open-admin" class="btn btn-outline btn-sm hidden">Panel de Administrador</button>
         <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Salir</button>
       </div>
@@ -212,10 +213,7 @@
       <section class="card">
         <div class="section-head">
           <h2>Planilla de Datos (Google Sheets)</h2>
-          <div class="topbar-controls">
-            <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-outline btn-sm">Abrir en Google Sheets</button>
-            <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
-          </div>
+          <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
         </div>
         <div class="sheet-embed-wrap">
           <iframe
