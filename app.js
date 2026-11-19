@@ -817,4 +817,12 @@ applyFontSize(currentFontSize);
 document.getElementById("btn-font-dec")?.addEventListener("click", () => applyFontSize(currentFontSize - 1.5));
 document.getElementById("btn-font-inc")?.addEventListener("click", () => applyFontSize(currentFontSize + 1.5));
 
+document.getElementById("btn-refresh-sheet")?.addEventListener("click", async () => {
+  await syncToGoogleSheets(false);
+  const iframe = document.getElementById("google-sheet-iframe");
+  if (iframe) {
+    iframe.src = `https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?widget=true&headers=false&t=${Date.now()}`;
+  }
+});
+
 init();

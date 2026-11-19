@@ -96,7 +96,7 @@
           <button type="button" id="btn-font-inc" class="btn btn-ghost btn-sm" title="Agrandar letra">A+</button>
         </div>
         <button type="button" id="btn-toggle-practice" class="btn btn-ghost btn-sm hidden">Práctica: OFF</button>
-        <button type="button" id="btn-open-admin" class="btn btn-outline btn-sm hidden">Administración</button>
+        <button type="button" id="btn-open-admin" class="btn btn-outline btn-sm hidden">Panel de Administrador</button>
         <button type="button" id="btn-logout" class="btn btn-ghost btn-sm">Salir</button>
       </div>
     </header>
@@ -135,14 +135,14 @@
     </main>
   </section>
 
-  <!-- PANTALLA 4: PANEL DE ADMINISTRACIÓN -->
+  <!-- PANTALLA 4: PANEL DE ADMINISTRADOR -->
   <section id="admin-screen" class="screen">
     <header class="topbar">
       <div class="topbar-user">
-        <span class="user-name">Administración</span>
+        <span class="user-name">Panel de Administrador</span>
       </div>
       <div class="topbar-controls">
-        <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-outline btn-sm">Abrir Planilla</button>
+        <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-outline btn-sm">Abrir en Google Sheets</button>
         <button type="button" id="btn-back-app" class="btn btn-primary btn-sm">Volver</button>
       </div>
     </header>
@@ -194,6 +194,22 @@
 
           <button type="submit" class="btn btn-primary">Guardar Edificio y Timbres</button>
         </form>
+      </section>
+
+      <!-- PLANILLA DE GOOGLE SHEETS CON DATOS CARGADOS -->
+      <section class="card">
+        <div class="section-head">
+          <h2>Planilla de Datos (Google Sheets)</h2>
+          <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
+        </div>
+        <div class="sheet-embed-wrap">
+          <iframe
+            id="google-sheet-iframe"
+            src="https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?widget=true&headers=false"
+            title="Planilla de Timbres"
+            loading="lazy"
+          ></iframe>
+        </div>
       </section>
 
       <!-- USUARIOS REGISTRADOS Y PERMISOS -->
