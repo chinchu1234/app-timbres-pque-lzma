@@ -86,6 +86,8 @@ let currentUser = getPersistentSession();
 let selectedBuildingId = null;
 let draftTimbres = [];
 let editingBuildingId = null;
+let dragSourceIndex = null;
+let dragContext = null;
 
 function getDB() {
   let data = null;
@@ -551,7 +553,7 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
   }
 });
 
-// --- GENERADOR BASE + EDICION INDIVIDUAL DE TIMBRES ---
+// --- GENERADOR BASE + EDICION Y REORDENAMIENTO DE TIMBRES ---
 function generateDeptoLabels() {
   const inicio = parseInt(document.getElementById("piso-inicio").value, 10) || 1;
   const fin = parseInt(document.getElementById("piso-fin").value, 10) || 1;
@@ -584,17 +586,76 @@ function renderDraftTimbres() {
   countEl.textContent = `Timbres a crear: ${draftTimbres.length}`;
   container.innerHTML = draftTimbres.length
     ? draftTimbres.map((label, idx) => `
-        <span class="timbre-chip">
-          ${label}
-          <button type="button" onclick="removeDraftTimbre(${idx})" title="Quitar timbre">×</button>
+        <span
+          class="timbre-chip"
+          draggable="true"
+          data-idx="${idx}"
+          ondragstart="handleChipDragStart(event, 'draft', ${idx})"
+          ondragover="handleChipDragOver(event)"
+          ondragleave="handleChipDragLeave(event)"
+          ondrop="handleChipDrop(event, 'draft', ${idx})"
+          ondragend="handleChipDragEnd(event)"
+        >
+          <button type="button" class="chip-move" onclick="moveDraftTimbre(${idx}, -1)" ${idx === 0 ? "disabled" : ""} title="Mover antes">←</button>
+          <span class="chip-label">${label}</span>
+          <button type="button" class="chip-move" onclick="moveDraftTimbre(${idx}, 1)" ${idx === draftTimbres.length - 1 ? "disabled" : ""} title="Mover después">→</button>
+          <button type="button" class="chip-remove" onclick="removeDraftTimbre(${idx})" title="Quitar timbre">×</button>
         </span>
       `).join("")
     : '<span class="legend">Sin timbres en la lista. Agregá alguno abajo.</span>';
 }
 
+window.moveDraftTimbre = function (idx, direction) {
+  const targetIdx = idx + direction;
+  if (targetIdx < 0 || targetIdx >= draftTimbres.length) return;
+  const [moved] = draftTimbres.splice(idx, 1);
+  draftTimbres.splice(targetIdx, 0, moved);
+  renderDraftTimbres();
+};
+
 window.removeDraftTimbre = function (idx) {
   draftTimbres.splice(idx, 1);
   renderDraftTimbres();
+};
+
+// --- ARRASTRAR Y SOLTAR BLOQUES (DRAG & DROP) ---
+window.handleChipDragStart = function (e, context, idx) {
+  dragSourceIndex = idx;
+  dragContext = context;
+  e.dataTransfer.effectAllowed = "move";
+  e.currentTarget.classList.add("dragging");
+};
+
+window.handleChipDragOver = function (e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = "move";
+  e.currentTarget.classList.add("drag-over");
+};
+
+window.handleChipDragLeave = function (e) {
+  e.currentTarget.classList.remove("drag-over");
+};
+
+window.handleChipDragEnd = function (e) {
+  e.currentTarget.classList.remove("dragging");
+  document.querySelectorAll(".timbre-chip").forEach((el) => el.classList.remove("drag-over", "dragging"));
+};
+
+window.handleChipDrop = async function (e, context, targetIdx) {
+  e.preventDefault();
+  e.currentTarget.classList.remove("drag-over");
+  if (dragSourceIndex === null || dragContext !== context || dragSourceIndex === targetIdx) return;
+
+  if (context === "draft") {
+    const [moved] = draftTimbres.splice(dragSourceIndex, 1);
+    draftTimbres.splice(targetIdx, 0, moved);
+    renderDraftTimbres();
+  } else if (context === "edit" && editingBuildingId) {
+    await reorderBuildingTimbre(editingBuildingId, dragSourceIndex, targetIdx);
+  }
+
+  dragSourceIndex = null;
+  dragContext = null;
 };
 
 function addCustomDraftTimbre() {
@@ -678,11 +739,11 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   refreshSheetIframe();
 
   if (ok) {
-    alert(`Edificio ${calle} ${numero} guardado y sincronizado con ${nuevosTimbres.length} timbres.`);
+    alert(`Edificio ${calle} ${numero} guardado y sincronizado en el orden elegido.`);
   }
 });
 
-// --- GESTION, EDICION DE TIMBRES Y ELIMINACION DE EDIFICIOS ---
+// --- GESTION, EDICION, REORDENAMIENTO Y ELIMINACION DE EDIFICIOS ---
 function renderBuildingsAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
   const tbody = document.getElementById("buildings-tbody");
@@ -741,14 +802,44 @@ function renderEditBuildingPanel() {
   title.textContent = `Editando timbres: ${building.calle} ${building.numero} (${building.timbres.length})`;
 
   chips.innerHTML = building.timbres.length
-    ? building.timbres.map((t) => `
-        <span class="timbre-chip">
-          ${t.depto}
-          <button type="button" onclick="quitarTimbreEdificio('${building.id}', '${t.id}')" title="Quitar timbre">×</button>
+    ? building.timbres.map((t, idx) => `
+        <span
+          class="timbre-chip"
+          draggable="true"
+          data-idx="${idx}"
+          ondragstart="handleChipDragStart(event, 'edit', ${idx})"
+          ondragover="handleChipDragOver(event)"
+          ondragleave="handleChipDragLeave(event)"
+          ondrop="handleChipDrop(event, 'edit', ${idx})"
+          ondragend="handleChipDragEnd(event)"
+        >
+          <button type="button" class="chip-move" onclick="moveExistingTimbre('${building.id}', ${idx}, -1)" ${idx === 0 ? "disabled" : ""} title="Mover antes">←</button>
+          <span class="chip-label">${t.depto}</span>
+          <button type="button" class="chip-move" onclick="moveExistingTimbre('${building.id}', ${idx}, 1)" ${idx === building.timbres.length - 1 ? "disabled" : ""} title="Mover después">→</button>
+          <button type="button" class="chip-remove" onclick="quitarTimbreEdificio('${building.id}', '${t.id}')" title="Quitar timbre">×</button>
         </span>
       `).join("")
     : '<span class="legend">Este edificio no tiene timbres.</span>';
 }
+
+async function reorderBuildingTimbre(buildingId, fromIdx, toIdx) {
+  const db = getDB();
+  const building = db.buildings.find((b) => b.id === buildingId);
+  if (!building) return;
+  if (toIdx < 0 || toIdx >= building.timbres.length) return;
+
+  const [moved] = building.timbres.splice(fromIdx, 1);
+  building.timbres.splice(toIdx, 0, moved);
+
+  saveDB(db);
+  renderEditBuildingPanel();
+  await syncToGoogleSheets(false);
+  refreshSheetIframe();
+}
+
+window.moveExistingTimbre = async function (buildingId, idx, direction) {
+  await reorderBuildingTimbre(buildingId, idx, idx + direction);
+};
 
 document.getElementById("btn-close-edit-building")?.addEventListener("click", () => {
   editingBuildingId = null;

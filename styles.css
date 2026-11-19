@@ -301,17 +301,59 @@ select:focus {
 .timbre-chip {
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: 0.35rem;
   background-color: var(--bg-surface);
   border: 1px solid var(--border-strong);
   border-radius: 4px;
-  padding: 0.28rem 0.55rem;
+  padding: 0.28rem 0.45rem;
   font-size: 0.84rem;
   font-weight: 500;
   color: var(--text-main);
+  cursor: grab;
+  user-select: none;
+  transition: background-color 0.15s ease, border-color 0.15s ease, opacity 0.15s ease;
 }
 
-.timbre-chip button {
+.timbre-chip:active {
+  cursor: grabbing;
+}
+
+.timbre-chip.dragging {
+  opacity: 0.45;
+  border-style: dashed;
+}
+
+.timbre-chip.drag-over {
+  border-color: var(--text-main);
+  background-color: var(--bg-subtle);
+}
+
+.chip-label {
+  padding: 0 0.15rem;
+}
+
+.chip-move {
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 3px;
+  color: var(--text-muted);
+  font-size: 0.72rem;
+  line-height: 1;
+  padding: 0.16rem 0.28rem;
+  cursor: pointer;
+}
+
+.chip-move:hover:not(:disabled) {
+  background-color: var(--bg-subtle);
+  color: var(--text-main);
+}
+
+.chip-move:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.chip-remove {
   background: none;
   border: none;
   color: var(--state-notocar-text);
@@ -319,10 +361,10 @@ select:focus {
   font-size: 0.95rem;
   line-height: 1;
   cursor: pointer;
-  padding: 0 0.15rem;
+  padding: 0 0.2rem;
 }
 
-.timbre-chip button:hover {
+.chip-remove:hover {
   opacity: 0.75;
 }
 

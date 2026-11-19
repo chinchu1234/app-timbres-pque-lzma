@@ -160,7 +160,7 @@
     </header>
 
     <main class="container">
-      <!-- ALTA DE EDIFICIOS Y TIMBRES (CON VISTA PREVIA EDITABLE) -->
+      <!-- ALTA DE EDIFICIOS Y TIMBRES (CON VISTA PREVIA EDITABLE Y REORDENABLE) -->
       <section class="card">
         <h2>Registrar Nuevo Edificio</h2>
         <form id="add-building-form">
@@ -202,11 +202,11 @@
             Incluir Planta Baja (PB)
           </label>
 
-          <!-- VISTA PREVIA EDITABLE DE TIMBRES -->
+          <!-- VISTA PREVIA EDITABLE Y REORDENABLE DE TIMBRES -->
           <div class="preview-editor">
             <div class="preview-editor-head">
               <span id="preview-timbres-count">Timbres a crear: 0</span>
-              <span class="legend">Tocá × para quitar o agregá timbres individuales abajo</span>
+              <span class="legend">Arrastrá o usá ← → para ordenar como irá en Google Sheets</span>
             </div>
 
             <div id="draft-timbres-list" class="chips-grid"></div>
@@ -221,7 +221,7 @@
         </form>
       </section>
 
-      <!-- EDIFICIOS REGISTRADOS (EDITAR TIMBRES O ELIMINAR EDIFICIO) -->
+      <!-- EDIFICIOS REGISTRADOS (EDITAR/REORDENAR TIMBRES O ELIMINAR EDIFICIO) -->
       <section class="card">
         <h2>Edificios Registrados</h2>
         <div class="table-wrap">
@@ -237,15 +237,18 @@
           </table>
         </div>
 
-        <!-- EDITOR INDIVIDUAL DE TIMBRES DE UN EDIFICIO YA EXISTENTE -->
+        <!-- EDITOR INDIVIDUAL Y DE ORDEN DE TIMBRES DE UN EDIFICIO YA EXISTENTE -->
         <div id="edit-building-panel" class="edit-building-box hidden">
           <div class="section-head">
-            <h3 id="edit-building-title">Editando timbres</h3>
+            <div>
+              <h3 id="edit-building-title">Editando timbres</h3>
+              <span class="legend">Arrastrá o usá ← → para cambiar el orden en la planilla</span>
+            </div>
             <button type="button" id="btn-close-edit-building" class="btn btn-ghost btn-sm">Cerrar editor</button>
           </div>
           <div id="edit-building-chips" class="chips-grid"></div>
           <div class="add-custom-row">
-            <input type="text" id="edit-custom-timbre-input" placeholder="Nuevo timbre (ej. 2° G, PB Local)..." autocomplete="off" />
+            <input type="text" id="edit-custom-timbre-input" placeholder="Nuevo timbre (ej. 2° G, Portería)..." autocomplete="off" />
             <button type="button" id="btn-save-edit-timbre" class="btn btn-primary btn-sm">Agregar al edificio</button>
           </div>
         </div>
