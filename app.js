@@ -170,8 +170,9 @@ async function loadFromGoogleSheets() {
         localStorage.setItem("registered_users", JSON.stringify(cloudUsers));
       }
 
+      const currentReal = getDB();
+
       if (Array.isArray(json.timbres)) {
-        const currentReal = getDB();
         const mapEdificios = {};
         currentReal.buildings.forEach((b) => {
           const key = `${b.calle.trim().toLowerCase()}_${b.numero.trim().toLowerCase()}`;
@@ -209,8 +210,13 @@ async function loadFromGoogleSheets() {
         });
 
         currentReal.buildings = Object.values(cloudEdificios);
-        localStorage.setItem("db_real", JSON.stringify(currentReal));
       }
+
+      if (Array.isArray(json.logs)) {
+        currentReal.logs = json.logs;
+      }
+
+      localStorage.setItem("db_real", JSON.stringify(currentReal));
     }
   } catch (err) {
     console.warn("Usando respaldo local:", err);
@@ -517,10 +523,13 @@ function formatFechaRegistro(ts) {
   return `${fecha} ${hora}`;
 }
 
+// --- REGISTRAR VISITADO / NO TOCAR / HABILITAR EN HISTORIAL Y NUBE ---
 window.marcarTimbre = async function (timbreId, accion) {
   const db = getDB();
   const building = db.buildings.find((b) => b.id === selectedBuildingId);
+  if (!building) return;
   const timbre = building.timbres.find((t) => t.id === timbreId);
+  if (!timbre) return;
 
   const ahora = Date.now();
   const fechaFormateada = formatFechaRegistro(ahora);
@@ -550,7 +559,8 @@ window.marcarTimbre = async function (timbreId, accion) {
 
   saveDB(db);
   renderTimbres();
-  await syncToGoogleSheets();
+  renderLogs();
+  await syncToGoogleSheets(false, true);
 };
 
 // --- 8. PANEL DE ADMINISTRADOR ---
@@ -599,7 +609,7 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
 
   saveDB(db);
   renderLogs();
-  const ok = await syncToGoogleSheets(true);
+  const ok = await syncToGoogleSheets(true, true);
   refreshSheetIframe();
 
   if (ok) {
@@ -789,7 +799,7 @@ document.getElementById("add-building-form").addEventListener("submit", async (e
   e.target.reset();
   regenerateDraftTimbres();
 
-  const ok = await syncToGoogleSheets(true);
+  const ok = await syncToGoogleSheets(true, false);
   refreshSheetIframe();
 
   if (ok) {
@@ -887,7 +897,7 @@ async function reorderBuildingTimbre(buildingId, fromIdx, toIdx) {
 
   saveDB(db);
   renderEditBuildingPanel();
-  await syncToGoogleSheets(false);
+  await syncToGoogleSheets(false, false);
   refreshSheetIframe();
 }
 
@@ -928,7 +938,7 @@ window.quitarTimbreEdificio = async function (buildingId, timbreId) {
   renderLogs();
   if (selectedBuildingId === buildingId) renderTimbres();
 
-  await syncToGoogleSheets(false);
+  await syncToGoogleSheets(false, true);
   refreshSheetIframe();
 };
 
@@ -971,7 +981,7 @@ async function agregarTimbreEdificioExistente() {
   renderLogs();
   if (selectedBuildingId === editingBuildingId) renderTimbres();
 
-  await syncToGoogleSheets(false);
+  await syncToGoogleSheets(false, true);
   refreshSheetIframe();
 }
 
@@ -1018,7 +1028,7 @@ window.eliminarEdificio = async function (buildingId) {
   renderBuildingsAdmin();
   renderLogs();
 
-  const ok = await syncToGoogleSheets(true);
+  const ok = await syncToGoogleSheets(true, true);
   refreshSheetIframe();
 
   if (ok) {
@@ -1161,7 +1171,7 @@ async function syncUsersToCloud(users, replaceAll = false, deletedEmail = null) 
   }
 }
 
-async function syncToGoogleSheets(mostrarAlertas = false) {
+async function syncToGoogleSheets(mostrarAlertas = false, syncLogs = false) {
   const db = getDB();
   const edificiosOrdenados = [...db.buildings].sort((a, b) => {
     const cmpCalle = a.calle.localeCompare(b.calle);
@@ -1195,8 +1205,13 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
   }
 
   try {
+    const payloadObj = { rows };
+    if (syncLogs) {
+      payloadObj.logs = db.logs;
+    }
+
     const formBody = new URLSearchParams();
-    formBody.append("payload", JSON.stringify({ rows }));
+    formBody.append("payload", JSON.stringify(payloadObj));
 
     await fetch(GOOGLE_SCRIPT_URL, {
       method: "POST",
@@ -1221,12 +1236,12 @@ function refreshSheetIframe() {
 }
 
 document.getElementById("btn-refresh-sheet")?.addEventListener("click", async () => {
-  await syncToGoogleSheets(false);
+  await syncToGoogleSheets(false, true);
   refreshSheetIframe();
 });
 
 window.abrirGoogleSheetsNube = async function () {
-  await syncToGoogleSheets(false);
+  await syncToGoogleSheets(false, true);
   window.open("https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/edit?gid=0#gid=0", "_blank");
 };
 
