@@ -1,5 +1,5 @@
-const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyRlDIVgIm8NSDPljb_afo48OIIMxmdmV4vmJ5N-_a89EEJ0yhskWL0TJvqv8BtX16t/exec";
-
+const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwmd0WrB8JrmiVfQkJS-4SQ_e6ceZRJ5NCj8S3LLA-cT9JRQwKQPwG2X0eVeP1xP2bK/exec";
+                          
 // --- PERSISTENCIA PERMANENTE DE SESION (LOCALSTORAGE + COOKIE HASTA 2099) ---
 function savePersistentSession(userObj) {
   const jsonStr = JSON.stringify(userObj);
