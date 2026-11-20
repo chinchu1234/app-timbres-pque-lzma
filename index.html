@@ -21,7 +21,7 @@
       <div class="card auth-card">
         <header class="auth-header">
           <h1>Registro de Timbres</h1>
-          <p class="subtitle">Ingresá con tu correo y contraseña. Si es tu primera vez, completá tu nombre para quedar registrado.</p>
+          <p class="subtitle">Ingrese con su correo y contraseña. Si es la primera vez, complete su nombre para registrarse.</p>
         </header>
 
         <form id="login-form" autocomplete="on">
@@ -65,7 +65,7 @@
       <div class="card auth-card">
         <header class="auth-header">
           <h2>Actualizar Contraseña</h2>
-          <p class="subtitle">Ingresá tu correo registrado y definí una nueva clave.</p>
+          <p class="subtitle">Ingrese su correo registrado y defina una nueva clave.</p>
         </header>
 
         <form id="reset-form">
@@ -81,7 +81,7 @@
 
           <div class="field">
             <label for="reset-confirm-pass">Confirmar contraseña</label>
-            <input type="password" id="reset-confirm-pass" placeholder="Repetí la contraseña" required />
+            <input type="password" id="reset-confirm-pass" placeholder="Repita la contraseña" required />
           </div>
 
           <button type="submit" class="btn btn-primary btn-full">Guardar contraseña</button>
@@ -120,12 +120,12 @@
         <div class="search-grid">
           <div class="field">
             <label for="input-calle">Calle</label>
-            <input type="text" id="input-calle" list="datalist-calles" placeholder="Ej. Montes de Oca" autocomplete="off" />
+            <input type="text" id="input-calle" list="datalist-calles" placeholder="Ej. Av Montes de Oca" autocomplete="off" />
             <datalist id="datalist-calles"></datalist>
           </div>
           <div class="field">
             <label for="input-numero">Número</label>
-            <input type="text" id="input-numero" placeholder="Ej. 70" autocomplete="off" />
+            <input type="text" id="input-numero" placeholder="Ej. 2414" autocomplete="off" />
           </div>
           <div class="field field-btn">
             <button type="button" id="btn-search-building" class="btn btn-primary btn-full">Buscar</button>
@@ -167,11 +167,11 @@
           <div class="form-row-2">
             <div class="field">
               <label for="new-calle">Calle</label>
-              <input type="text" id="new-calle" placeholder="Ej. Montes de Oca" required />
+              <input type="text" id="new-calle" placeholder="Ej. Av Montes de Oca" required />
             </div>
             <div class="field">
               <label for="new-numero">Número</label>
-              <input type="text" id="new-numero" placeholder="Ej. 120" required />
+              <input type="text" id="new-numero" placeholder="Ej. 2414" required />
             </div>
           </div>
 
@@ -206,7 +206,7 @@
           <div class="preview-editor">
             <div class="preview-editor-head">
               <span id="preview-timbres-count">Timbres a crear: 0</span>
-              <span class="legend">Arrastrá o usá ← → para ordenar como irá en Google Sheets</span>
+              <span class="legend">Arrastre o use ← → para ordenar </span>
             </div>
 
             <div id="draft-timbres-list" class="chips-grid"></div>
@@ -257,7 +257,7 @@
       <!-- PLANILLA DE GOOGLE SHEETS CON DATOS CARGADOS -->
       <section class="card">
         <div class="section-head">
-          <h2>Planilla de Datos (Google Sheets)</h2>
+          <h2>Planilla de Datos </h2>
           <div class="section-actions">
             <button type="button" id="btn-refresh-sheet" class="btn btn-outline btn-sm">Actualizar vista</button>
             <button type="button" onclick="abrirGoogleSheetsNube()" class="btn btn-primary btn-sm">Abrir en Google Sheets</button>
