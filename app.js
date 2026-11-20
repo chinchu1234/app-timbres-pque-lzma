@@ -28,10 +28,25 @@ function clearPersistentSession() {
   document.cookie = "timbres_session=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; SameSite=Lax";
 }
 
-// --- 1. GESTION DE USUARIOS ---
+// --- 1. GESTION DE USUARIOS Y ELIMINACION DEFINITIVA ---
 const DEFAULT_USERS = {
   "admin@app.com": { pass: "1234", nombre: "Administrador Principal", rol: "admin" }
 };
+
+function getDeletedUsersList() {
+  try {
+    const arr = JSON.parse(localStorage.getItem("deleted_users_list"));
+    return Array.isArray(arr) ? arr.map((e) => e.trim().toLowerCase()) : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveDeletedUsersList(list) {
+  const clean = [...new Set(list.map((e) => e.trim().toLowerCase()).filter((e) => e && e !== "admin@app.com"))];
+  localStorage.setItem("deleted_users_list", JSON.stringify(clean));
+  return clean;
+}
 
 function getUsersDB() {
   let users = null;
@@ -42,6 +57,14 @@ function getUsersDB() {
   if (!users || typeof users !== "object") {
     users = { ...DEFAULT_USERS };
   }
+
+  const deletedList = getDeletedUsersList();
+  Object.keys(users).forEach((key) => {
+    if (deletedList.includes(key.trim().toLowerCase())) {
+      delete users[key];
+    }
+  });
+
   if (!users["admin@app.com"]) {
     users["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
   }
@@ -49,13 +72,27 @@ function getUsersDB() {
   return users;
 }
 
-function saveUsersDB(users, replaceAll = false) {
-  const finalUsers = replaceAll ? { ...users } : { ...getUsersDB(), ...users };
+function saveUsersDB(users, replaceAll = false, deletedEmail = null) {
+  let deletedList = getDeletedUsersList();
+  if (deletedEmail) {
+    deletedList = saveDeletedUsersList([...deletedList, deletedEmail]);
+  }
+
+  const rawFinal = replaceAll ? { ...users } : { ...getUsersDB(), ...users };
+  const finalUsers = {};
+
+  Object.keys(rawFinal).forEach((key) => {
+    const cleanKey = key.trim().toLowerCase();
+    if (!deletedList.includes(cleanKey)) {
+      finalUsers[cleanKey] = rawFinal[key];
+    }
+  });
+
   if (!finalUsers["admin@app.com"]) {
     finalUsers["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
   }
   localStorage.setItem("registered_users", JSON.stringify(finalUsers));
-  syncUsersToCloud(finalUsers, replaceAll);
+  syncUsersToCloud(finalUsers, replaceAll, deletedEmail);
 }
 
 function hasAssignedName(userObj, email) {
@@ -99,6 +136,9 @@ function getDB() {
     data = { buildings: JSON.parse(JSON.stringify(INITIAL_BUILDINGS)), logs: [] };
     localStorage.setItem("db_real", JSON.stringify(data));
   }
+  if (!Array.isArray(data.logs)) {
+    data.logs = [];
+  }
   return data;
 }
 
@@ -115,11 +155,14 @@ async function loadFromGoogleSheets() {
     const json = await res.json();
 
     if (json.status === "ok") {
-      if (json.users && Object.keys(json.users).length > 0) {
+      if (json.users && typeof json.users === "object") {
+        const deletedList = getDeletedUsersList();
         const cloudUsers = {};
         Object.keys(json.users).forEach((email) => {
           const cleanEmail = email.trim().toLowerCase();
-          cloudUsers[cleanEmail] = json.users[email];
+          if (!deletedList.includes(cleanEmail)) {
+            cloudUsers[cleanEmail] = json.users[email];
+          }
         });
         if (!cloudUsers["admin@app.com"]) {
           cloudUsers["admin@app.com"] = DEFAULT_USERS["admin@app.com"];
@@ -184,25 +227,31 @@ async function init() {
   regenerateDraftTimbres();
 
   if (currentUser && currentUser.email) {
-    const users = getUsersDB();
-    if (!users[currentUser.email]) {
-      users[currentUser.email] = {
-        pass: currentUser.pass || "1234",
-        nombre: currentUser.nombre || currentUser.email,
-        rol: currentUser.rol || "usuario"
-      };
-      saveUsersDB(users);
+    const cleanEmail = currentUser.email.trim().toLowerCase();
+    const deletedList = getDeletedUsersList();
+    if (deletedList.includes(cleanEmail)) {
+      clearPersistentSession();
+      currentUser = null;
+      showScreen("login-screen");
+    } else {
+      const users = getUsersDB();
+      if (users[cleanEmail]) {
+        showApp();
+      } else {
+        clearPersistentSession();
+        currentUser = null;
+      }
     }
-    showApp();
   }
 
   await loadFromGoogleSheets();
 
   if (currentUser) {
+    const cleanEmail = currentUser.email.trim().toLowerCase();
     const users = getUsersDB();
-    if (users[currentUser.email]) {
-      currentUser.rol = users[currentUser.email].rol;
-      currentUser.nombre = users[currentUser.email].nombre;
+    if (users[cleanEmail]) {
+      currentUser.rol = users[cleanEmail].rol;
+      currentUser.nombre = users[cleanEmail].nombre;
       savePersistentSession(currentUser);
       showApp();
     } else {
@@ -295,6 +344,8 @@ document.getElementById("login-form").addEventListener("submit", async (e) => {
       errorEl.textContent = "Es tu primera vez. Completá tu Nombre y Apellido para quedar registrado.";
       return;
     }
+
+    saveDeletedUsersList(getDeletedUsersList().filter((em) => em !== email));
 
     const newUser = { pass, nombre: nombreIngresado, rol: "usuario" };
     users[email] = newUser;
@@ -972,7 +1023,7 @@ window.eliminarEdificio = async function (buildingId) {
   }
 };
 
-// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ORDENADOS POR ROL + ELIMINAR) ---
+// --- 9. TABLA DE USUARIOS REGISTRADOS Y PERMISOS (ORDENADOS POR ROL + ELIMINAR DEFINITIVO) ---
 function renderUsersAdmin() {
   if (!currentUser || currentUser.rol !== "admin") return;
 
@@ -1041,7 +1092,7 @@ window.toggleUserRole = async function (email) {
 
   const nuevoRol = users[email].rol === "admin" ? "usuario" : "admin";
   users[email].rol = nuevoRol;
-  saveUsersDB(users, false);
+  saveUsersDB(users, false, null);
   renderUsersAdmin();
 
   const accionTexto = nuevoRol === "admin" ? "Permisos de administrador asignados a" : "Permisos de administrador retirados a";
@@ -1050,32 +1101,22 @@ window.toggleUserRole = async function (email) {
 
 window.eliminarUsuario = async function (email) {
   if (!currentUser || currentUser.rol !== "admin") return;
-  if (email.toLowerCase() === "admin@app.com" || email.toLowerCase() === currentUser.email.toLowerCase()) return;
+  const cleanEmail = email.trim().toLowerCase();
+  if (cleanEmail === "admin@app.com" || cleanEmail === currentUser.email.toLowerCase()) return;
 
   const users = getUsersDB();
-  const target = users[email];
+  const target = users[cleanEmail] || users[email];
   if (!target) return;
 
-  const confirmar = confirm(`¿Eliminar del registro al usuario "${target.nombre || email}" (${email})?`);
+  const confirmar = confirm(`¿Eliminar para siempre del registro al usuario "${target.nombre || email}" (${email})?`);
   if (!confirmar) return;
 
+  delete users[cleanEmail];
   delete users[email];
-  saveUsersDB(users, true);
-
-  const db = getDB();
-  db.logs.unshift({
-    fecha: formatFechaRegistro(Date.now()),
-    usuario: currentUser.nombre,
-    email: currentUser.email,
-    edificio: "USUARIOS",
-    timbre: target.nombre || email,
-    accion: "USUARIO ELIMINADO"
-  });
-  saveDB(db);
+  saveUsersDB(users, true, cleanEmail);
 
   renderUsersAdmin();
-  renderLogs();
-  alert(`Usuario "${target.nombre || email}" eliminado del registro.`);
+  alert(`Usuario "${target.nombre || email}" eliminado para siempre.`);
 };
 
 function renderLogs() {
@@ -1102,11 +1143,15 @@ function renderLogs() {
 }
 
 // --- 10. GOOGLE SHEETS (ESCRITURA EN LA NUBE) ---
-async function syncUsersToCloud(users, replaceAll = false) {
+async function syncUsersToCloud(users, replaceAll = false, deletedEmail = null) {
   if (!GOOGLE_SCRIPT_URL || !GOOGLE_SCRIPT_URL.startsWith("https://script.google.com/macros/s/")) return;
   try {
     const formBody = new URLSearchParams();
-    formBody.append("payload", JSON.stringify({ users, replaceUsers: replaceAll }));
+    formBody.append("payload", JSON.stringify({
+      users,
+      replaceUsers: replaceAll,
+      deletedEmail: deletedEmail || ""
+    }));
     await fetch(GOOGLE_SCRIPT_URL, { method: "POST", mode: "no-cors", body: formBody });
   } catch (err) {
     console.error("Error guardando usuarios:", err);
@@ -1168,7 +1213,7 @@ async function syncToGoogleSheets(mostrarAlertas = false) {
 function refreshSheetIframe() {
   const iframe = document.getElementById("google-sheet-iframe");
   if (iframe) {
-    iframe.src = `https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?widget=true&headers=false&t=${Date.now()}`;
+    iframe.src = `https://docs.google.com/spreadsheets/d/1hhcXRf3TQuNS1VZ9FnTC98H5goBkOlxBrKZeAlTtHuE/htmlembed?gid=0&single=true&widget=false&headers=false&t=${Date.now()}`;
   }
 }
 
