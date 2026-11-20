@@ -574,7 +574,7 @@ document.getElementById("btn-back-app").addEventListener("click", () => {
 
 document.getElementById("btn-reset-dates")?.addEventListener("click", async () => {
   if (!currentUser || currentUser.rol !== "admin") return;
-  if (!confirm("¿Reiniciar todas las fechas de los edificios a 'Nunca tocado'?")) return;
+  if (!confirm("¿Reiniciar todas las fechas de los edificios a 'Nunca tocado' y limpiar el historial?")) return;
 
   const db = getDB();
   db.buildings.forEach((b) => {
@@ -585,14 +585,17 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
     });
   });
 
-  db.logs.unshift({
-    fecha: formatFechaRegistro(Date.now()),
-    usuario: currentUser.nombre,
-    email: currentUser.email,
-    edificio: "TODOS",
-    timbre: "SISTEMA",
-    accion: "REINICIO DE FECHAS"
-  });
+  // Elimina todos los registros anteriores y deja únicamente esta interacción
+  db.logs = [
+    {
+      fecha: formatFechaRegistro(Date.now()),
+      usuario: currentUser.nombre,
+      email: currentUser.email,
+      edificio: "TODOS",
+      timbre: "SISTEMA",
+      accion: "REINICIO DE FECHAS (DATOS ELIMINADOS)"
+    }
+  ];
 
   saveDB(db);
   renderLogs();
@@ -600,7 +603,7 @@ document.getElementById("btn-reset-dates")?.addEventListener("click", async () =
   refreshSheetIframe();
 
   if (ok) {
-    alert("Fechas reiniciadas y actualizadas en la planilla.");
+    alert("Fechas reiniciadas y registros anteriores eliminados.");
   }
 });
 
